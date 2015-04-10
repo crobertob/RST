@@ -428,6 +428,8 @@ def get_minimal_matrix(m):
             ''' Step 3 '''
             min_matrix = matrix_segment_absorption(main_row, i, k, min_matrix)
     print("Minimal matrix:", min_matrix)
+    dreduct = get_dreduct(min_matrix)
+    print("D-reduct:", dreduct)
     
     
 def matrix_elem_absorption(main_row, i, k, min_matrix):        
@@ -466,6 +468,16 @@ def matrix_segment_absorption(main_row, i, k, min_matrix):
                 row[l] = main_row[k]
     return min_matrix
 
+def get_dreduct(min_matrix):
+    dreduct_set = set()
+    dreduct_list = []
+    elem = []
+    for i, row in enumerate(min_matrix):
+        for j, elem in enumerate(row):
+            dreduct_set.update(row[j])
+    for i, set_elem in enumerate(dreduct_set):
+        dreduct_list.append(set_elem)
+    return dreduct_list
 
 ###############################################################
 main()
