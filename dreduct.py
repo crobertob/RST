@@ -382,109 +382,6 @@ def discrete_record_count(db):
     cursor.execute("SELECT COUNT(*) FROM discrete_records")
     return cursor.fetchone()[0]
     
-# def create_discernibility_matrix(db):
-    # cursor = db.cursor()
-    # cursor.execute("SELECT discrete_records.id, discrete_records.input_size, discrete_records.exec_time,"
-           # "discrete_machines.name, discrete_machines.freq, discrete_machines.memory FROM " 
-           # "discrete_records, discrete_machines WHERE discrete_records.machine_id = discrete_machines.id")
-    # discrete_matrix = []
-    # for field in cursor:
-        # discrete_matrix.append([field[4],field[5],field[1],field[2]])
-    # discernibility_collection = []
-    # #for i, row in enumerate(discrete_matrix):
-    # #discernibility_collection = matrixtocollection(discrete_matrix, 3)
-    # discernibility_collection = relative_discernibility(discrete_matrix, 3)
-    # print("Discernibility matrix:")
-    # print(discernibility_collection)
-    # # print("Reduced set:")
-    # # reduced_set = groupboolean(discernibility_collection)
-    # # reduced_set.remove(set())
-    # # print(reduced_set)
-    # # after_absorption = []
-    # # after_absorption = absorptionrule(reduced_set)
-    # # print("After absorption:")
-    # # print(after_absorption)
-    # # dreduct_list = []
-    # # dreduct_list = dreduct(after_absorption)
-    # # print(dreduct_list)
-    # # createdecisiontable(db, dreduct_list, 2)
-
-
-
-# def createdecisiontable(db, dreduct, target):
-    # cursor = db.cursor()
-    # ''' This should take as input a map so that only the selected variables are grabbed from table'''
-    # sql = ("SELECT discrete_machines.freq, discrete_records.input_size, discrete_records.exec_time "
-           # "FROM discrete_records, discrete_machines WHERE discrete_records.machine_id = discrete_machines.id")
-    # cursor.execute(sql)
-    # reduced_matrix = []
-    # for field in cursor:
-        # reduced_matrix.append([field[0], field[1], field[2]])
-    # discernibility_collection = []
-    # discernibility_collection = relative_discernibility(reduced_matrix, 2)
-    # print("Relative Discernibility matrix:")
-    # print(discernibility_collection)
-    # reduced_set = []
-    # after_absorption = []
-    # for i, row in enumerate(discernibility_collection):
-        # reduced_set.append(groupboolean(row))
-    # for elems in reduced_set:
-        # elems.remove(set())
-    # print("After remove empty set:")
-    # print(reduced_set)
-    # for elems in reduced_set:
-        # after_absorption.append(absorptionrule(elems))
-    # print("After absorption:")
-    # print(after_absorption)
-    # print("Decision table:")
-    # decision_table = []
-    # decision_row = [0 for i in range(len(reduced_matrix[0]))]
-    # for i, row in enumerate(reduced_matrix):
-        # for j in after_absorption[i]:
-            # idx = j.pop()
-            # j.add(idx)
-            # decision_row[idx-1]=row [idx-1]
-        # decision_row[target]=row[target]
-        # print(decision_row)
-        # decision_table.append(decision_row)
-        # decision_row = [0 for i in range(len(reduced_matrix[0]))]
-    # return decision_table
-
-    # def groupboolean(m):
-    # newm = []
-    # for i in m:
-        # if i not in newm:
-            # newm.append(i)
-    # return newm
-
-  
-# def absorptionrule(m):
-    # i = 0
-    # j = 0
-    # newm = []
-    # newm = m.copy()
-    # while i < len(newm):
-        # while j < len(newm):
-            # if i != j and newm[i].issubset(newm[j]):
-                # newm.remove(newm[j])
-                # if j < i:
-                    # i -= 1
-            # else:
-                # j += 1
-        # i += 1
-        # j = 0
-    # return(newm)
-
-  
-# def dreduct(m):
-    # newm = []
-    # elem = []
-    # for i, set1 in enumerate(m):
-        # elem = set1.pop()
-        # m[i].add(elem)
-        # newm.append(elem)
-    # return newm
-
     
 def get_discernibility_matrix(db):
     target = 3
@@ -518,9 +415,9 @@ def get_minimal_matrix(m):
     print(min_matrix)
     for i, main_row in enumerate(min_matrix):
         for k, elem in enumerate(main_row):
-            print("Step ", i, k)
             if main_row[k] == set():
                 continue
+            ''' Step 1 '''
             if len(main_row[k]) > 1:
                 min_matrix = matrix_elem_absorption(main_row, i, k, min_matrix)
                 print("After absorption:", min_matrix)
@@ -534,7 +431,6 @@ def get_minimal_matrix(m):
     
     
 def matrix_elem_absorption(main_row, i, k, min_matrix):        
-    ''' Step 1 '''   
     for j, row in enumerate(min_matrix, start = i):
         for l, elems in enumerate(row):
             if i == j and k >= l or main_row[k] == set() or row[l] == set() or main_row[k].issubset(row[l]):

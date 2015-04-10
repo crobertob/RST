@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<records>
+    <record machine_name="One" machine_freq="2" machine_memory="1" input_size="6" exec_time="300"></record>
+    <record machine_name="Two" machine_freq="3" machine_memory="2" input_size="4" exec_time="66"></record>
+    <record machine_name="One" machine_freq="2" machine_memory="1" input_size="6" exec_time="300"></record>
+    <record machine_name="Three" machine_freq="2" machine_memory="2" input_size="6" exec_time="300"></record>
+    <record machine_name="Four" machine_freq="1" machine_memory="1" input_size="8" exec_time="800"></record>
+    <record machine_name="Four" machine_freq="1" machine_memory="1" input_size="4" exec_time="400"></record>
+    <record machine_name="Two" machine_freq="3" machine_memory="2" input_size="2" exec_time="66"></record>
+    <record machine_name="Four" machine_freq="1" machine_memory="1" input_size="8" exec_time="800"></record>
+</records>
