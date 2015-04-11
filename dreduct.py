@@ -394,8 +394,8 @@ def get_discernibility_matrix(db):
         discrete_matrix.append([field[4],field[5],field[1],field[2]])
     discernibility_matrix = []
     discernibility_matrix = get_relative_discernibility(discrete_matrix, target)
-    print("Discernibility matrix:")
-    print(discernibility_matrix)
+#    print("Discernibility matrix:")
+#    print(discernibility_matrix)
 
 def get_relative_discernibility(m, target):
     '''construct discernibility matrix (collection) relative to current row'''
@@ -430,8 +430,10 @@ def get_minimal_matrix(m):
     print("Minimal matrix:", min_matrix)
     dreduct = get_dreduct(min_matrix)
     print("D-reduct:", dreduct)
-    
-    
+    relevant_attribute_list = get_relevant_attribute_list(min_matrix)
+    print("Relevant attribute list:", relevant_attribute_list)
+
+       
 def matrix_elem_absorption(main_row, i, k, min_matrix):        
     for j, row in enumerate(min_matrix, start = i):
         for l, elems in enumerate(row):
@@ -478,6 +480,29 @@ def get_dreduct(min_matrix):
     for i, set_elem in enumerate(dreduct_set):
         dreduct_list.append(set_elem)
     return dreduct_list
+
+def get_relevant_attribute_list(min_matrix):
+    attribute_set = set()
+    attribute_list = []
+    ''' Go through first column'''
+    for n, row in enumerate(min_matrix):
+        attribute_set.update(row[0])
+    attribute_list.append(sorted(attribute_set))
+    attribute_set = set()
+    for i, row in enumerate(min_matrix):
+        ''' Go through rows '''
+        for j, elem in enumerate(row):
+            attribute_set.update(row[j])
+        ''' Go through columns '''
+        if i < len(min_matrix):
+            for k, inner_row in enumerate(min_matrix):
+                if k > i:
+                    attribute_set.update(inner_row[i + 1])
+        attribute_list.append(sorted(attribute_set))
+        attribute_set = set()
+    return attribute_list
+
+
 
 ###############################################################
 main()
