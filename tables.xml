@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tables>
+    <main_table name="records">
+        <field name="id" type="int" field_attr="INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL"></field>
+        <field name="input_size" type="int" field_attr="INTEGER NOT NULL"></field>
+        <field name="exec_time" type="float" field_attr="REAL NOT NULL"></field>
+        <field name="machine_id" type="int" field_attr="INTEGER NOT NULL"></field>
+        <foreign_key name="machine_id" reference="machines"></foreign_key>
+    </main_table>
+        <table name="machines">
+        <field name = "id" type="int" field_attr="INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL"></field>
+        <field name = "name" type="text" field_attr="TEXT UNIQUE NOT NULL"></field>
+        <field name = "freq" type="float" field_attr="REAL NOT NULL"></field>
+        <field name = "memory" type="int" field_attr="INTEGER NOT NULL"></field>
+    </table>
+</tables>

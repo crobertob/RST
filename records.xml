@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<main_table>
+    <records input_size="6" exec_time="300"></records>
+    <machines name="One" freq="2" memory="1"></machines>
+    <records input_size="4" exec_time="66"></records>
+    <machines name="Two" freq="3" memory="2"></machines>
+    <records input_size="6" exec_time="300"></records>
+    <machines name="One" freq="2" memory="1"></machines>
+    <records input_size="6" exec_time="300"></records>
+    <machines name="Three" freq="2" memory="2"></machines>
+    <records input_size="8" exec_time="800"></records>
+    <machines name="Four" freq="1" memory="1"></machines>
+    <records input_size="4" exec_time="400"></records>
+    <machines name="Four" freq="1" memory="1"></machines>
+    <records input_size="2" exec_time="66"></records>
+    <machines name="Two" freq="3" memory="2"></machines>
+    <records input_size="8" exec_time="800"></records>
+    <machines name="Four" freq="1" memory="1"></machines>  
+</main_table>
