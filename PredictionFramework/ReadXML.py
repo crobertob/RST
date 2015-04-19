@@ -10,6 +10,7 @@
 # General Public License for more details.
 
 import datetime
+import logging
 import itertools
 import os
 import sqlite3
@@ -20,8 +21,12 @@ import xml.parsers.expat
 import xml.sax.saxutils
 import Console
 import Util
-from locale import str
 from builtins import len
+from locale import str
+from math import ceil
+
+
+
 
 
 def import_db_struct_fromXML(db):
@@ -140,16 +145,148 @@ def import_db_struct_fromXML(db):
         offset_list = []
     store_db_struct(db, tables, headers, types, user_input, attributes, discretize, 
                     scripts, partition_sizes, offsets, foreign_keys, references)
+    discrete_tables = list_discrete_tables(tables)
+    discrete_attributes = change_to_discrete_attrib(attributes)
+    print(discrete_attributes)
     create_tables(db, tables, headers, attributes, foreign_keys, references)
+    create_tables(db, discrete_tables, headers, discrete_attributes, foreign_keys, references)
     list_structure_records(db)    
 
+
+def list_discrete_tables(tables):
+    discrete_tables = ["discrete_" + s for s in tables]
+    return discrete_tables
+
+
+def change_to_discrete_attrib(attributes):
+    new_attributes = []
+    for i, attr_tables in enumerate(attributes):
+        new_attributes.append([])
+        for attribute in attr_tables:
+            attribute = attribute.replace("REAL", "INTEGER")
+            new_attributes[i].append(attribute)
+    return new_attributes
+
+
+def reset_tables(db, tables):
+    cursor = db.cursor()
+    for table in tables:
+        cursor.execute("delete from " + table)
+        cursor.execute("delete from sqlite_sequence where name='" + table + "'")
+        cursor.execute("vacuum") 
+
+
+def drop_tables(db, tables):
+    cursor = db.cursor()
+    for table in tables:
+        cursor.execute("DROP TABLE IF EXISTS " + table)
+
+
+def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
+                            offsets, partition_sizes, user_input):
+    value_table = []
+    value = []
+
+    discrete_tables = list_discrete_tables(tables)
+    reset_tables(db, discrete_tables)
+    records = get_records(db, tables, headers, foreign_keys)
+    
+    for i in tables:
+        value_table.append([])
+    for record in records:
+        for i, table_headers in enumerate(headers):
+            try:
+                for j in range(len(table_headers)):
+                    if user_input[i][j] == 1:
+                        if discretize[i][j] == 1:
+                            if types[i][j] == "int":
+                                value.append(int(ceil(int(record[i*len(table_headers) + j]/
+                                                     partition_sizes[i][j]))) + offsets[i][j])
+                            elif types[i][j] == "float":
+                                value.append(int(ceil(float(record[i*len(table_headers) + j]/
+                                                       partition_sizes[i][j]))) + offsets[i][j])
+                        else:
+                            value.append(record[i*len(table_headers)+j])
+                value_table[i].append(value)
+                value = []
+            except ValueError as err:
+                db.rollback()
+                print("ERROR:", err)
+                break
+    print("Imported data:", value_table)
+    ref_table_id = 0
+    main_table_id = 0
+    if len(foreign_keys) > 0:
+        for i, current_key in enumerate(foreign_keys):
+            for p, table in enumerate(discrete_tables):
+                '''Store the index of the table that contains the reference'''
+                if table == "discrete_" + foreign_keys[i][1]:
+                    ref_table_id = p
+                if table == "discrete_" + foreign_keys[i][2]:
+                    main_table_id = p
+            for k, current_value_row in enumerate(value_table[ref_table_id]):
+                try:
+                    key_value = get_and_set_foreign(db, discrete_tables[ref_table_id],
+                                                      headers[ref_table_id], 
+                                                      current_key, current_value_row)
+                    value_table[main_table_id][k].append(key_value)
+                    insert_sqlite(db, discrete_tables[main_table_id], headers[main_table_id], 
+                                   value_table[main_table_id][k])
+                except ValueError as err:
+                    db.rollback()
+                    print("ERROR:", err)
+                    break
+    else:
+        db.commit()
+
+#    discrete_records = get_records(db, discrete_tables, headers, foreign_keys)
+#    print_records(discrete_records)
+    #get_discernibility_matrix(db)
+                     
+                        
+def get_records(db, tables, headers, foreign_keys):
+    cursor = db.cursor()
+    var_string = ''
+    table = ''
+    refs = ''
+    for i, table_headers in enumerate(headers):
+        for j in range(len(table_headers)):
+            var_string += tables[i] + "."
+            var_string += headers[i][j] + ", "
+    var_string = var_string[:-2]
+    for i in range(len(tables)):
+        table += tables[i] + ", "
+    table = table[:-2]
+    if tables[0].find("discrete", 0) >= 0:
+        for i in range(len(foreign_keys)):
+            refs += "discrete_"
+            refs += foreign_keys[i][2]+ "."
+            refs += foreign_keys[i][0]+ " = "
+            refs += "discrete_"
+            refs += foreign_keys[i][1]
+            refs += ".id and "
+    else:
+        for i in range(len(foreign_keys)):
+            refs += foreign_keys[i][2]+ "."
+            refs += foreign_keys[i][0]+ " = "
+            refs += foreign_keys[i][1]
+            refs += ".id and "
+    refs = refs[:-5]
+    sql = 'SELECT {} FROM {} WHERE {}'.format(var_string, table, refs)
+    cursor.execute(sql)
+    return cursor
+
+    
+def print_records(cursor):    
+    print("Current database:")
+    for record in cursor:
+        print(record)
 
 
 def create_tables(db, tables, headers, attributes, foreign_keys, references):
     '''This function is only executed the first time the DB is created'''
     cursor = db.cursor()
-    for i, table in enumerate(tables):
-        cursor.execute("DROP TABLE IF EXISTS " + table) 
+    drop_tables(db, tables)
     for i, table_headers in enumerate(headers):
         elements = ""
         for j in range(len(table_headers)):
@@ -162,7 +299,7 @@ def create_tables(db, tables, headers, attributes, foreign_keys, references):
                 elements += ') REFERENCES '
                 elements += references[i][k] + ", "
         elements = elements[:-2]
-        sql = 'CREATE TABLE {} ({})'.format(tables[i], elements) 
+        sql = 'CREATE TABLE IF NOT EXISTS {} ({})'.format(tables[i], elements) 
         cursor.execute(sql)
         
         
@@ -203,7 +340,8 @@ def get_db_struct(db):
     for key in cursor:
         foreign_keys.append([key[0], key[1], key[2]])
     
-    return (tables, headers, types, user_input, discretize, scripts,
+    discrete_tables = list_discrete_tables(tables)
+    return (tables, discrete_tables, headers, types, user_input, discretize, scripts,
             partition_sizes, offsets, foreign_keys)
 
 
@@ -262,10 +400,10 @@ def connect(filename):
     
 def create_db_struct(db):
     cursor = db.cursor()
-    cursor.execute("CREATE TABLE _tables ("
+    cursor.execute("CREATE TABLE IF NOT EXISTS _tables ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, "
             "name TEXT UNIQUE NOT NULL) ")
-    cursor.execute("CREATE TABLE _headers ("
+    cursor.execute("CREATE TABLE IF NOT EXISTS _headers ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, "
             "table_id INTEGER NOT NULL, "
             "name TEXT NOT NULL, "
@@ -276,7 +414,7 @@ def create_db_struct(db):
             "script TEXT, "
             "partition_size INTEGER, "
             "offset INTEGER) ")
-    cursor.execute("CREATE TABLE _foreign_keys ("
+    cursor.execute("CREATE TABLE IF NOT EXISTS _foreign_keys ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, "
             "table_id INTEGER NOT NULL, "
             "name TEXT NOT NULL, "
@@ -301,31 +439,6 @@ def list_structure_records(db):
     for foreign_key in cursor:
         print("{0[0]}: FOREIGN KEY {0[1]} {0[2]}".format(foreign_key))
 
-def list_tables(db, tables, headers, foreign_keys):
-    cursor = db.cursor()
-    var_string = ''
-    table = ''
-    refs = ''
-    for i, table_headers in enumerate(headers):
-        for j in range(len(table_headers)):
-            var_string += tables[i] + "."
-            var_string += headers[i][j] + ", "
-    var_string = var_string[:-2]
-    for i in range(len(tables)):
-        table += tables[i] + ", "
-    table = table[:-2]
-    for i in range(len(foreign_keys)):
-        refs += foreign_keys[i][2]+ "."
-        refs += foreign_keys[i][0]+ " = "
-        refs += foreign_keys[i][1]
-        refs += ".id and "
-    refs = refs[:-5]
-    sql = 'SELECT {} FROM {} WHERE {}'.format(var_string, table, refs)
-    cursor.execute(sql)
-    print("Current database:")
-    for record in cursor:
-        print(record)
-
 
 def import_records_fromXML(db, tables, headers, types, foreign_keys, user_input):
     value_table = []
@@ -342,9 +455,8 @@ def import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
         print("ERROR:", err)
         return
 
-    cursor = db.cursor()
     for i, table_header in enumerate(headers):
-        cursor.execute("DELETE FROM " + tables[i])
+        reset_tables(db, [tables[i]])
         for element in tree.findall(tables[i]):
             try:
                 for j in range(len(table_header)):
@@ -417,28 +529,33 @@ def get_foreign_id(db, header, reference, value):
 
 
 ###############################################
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 db = connect("test.sdb") 
 import_db_struct_fromXML(db)
-'''TODO: Remove attributes from get_db_struct'''
-(tables, headers, types, user_input, discretize, scripts,
+(tables, discrete_tables, headers, types, user_input, discretize, scripts,
             partition_sizes, offsets, foreign_keys) = get_db_struct(db)
-print("Tables:", tables)
-print("Headers:", headers)
-print("Types:", types)
-print("User input:", user_input)
-print("Discretize:", discretize)
-print("Scripts:", scripts)
-print("Partition sizes:", partition_sizes)
-print("Offsets:", offsets)
-print("Foreign keys:", foreign_keys)            
 
-'''TODO: Import data to tables'''
-'''TODO: Add individual record manually'''
+logging.debug("Tables: %s", tables)
+logging.debug("Discrete Tables: %s", discrete_tables)
+logging.debug("Headers: %s", headers)
+logging.debug("Types: %s", types)
+logging.debug("User input: %s", user_input)
+logging.debug("Discretize: %s", discretize)
+logging.debug("Scripts: %s", scripts)
+logging.debug("Partition sizes: %s", partition_sizes)
+logging.debug("Offsets: %s", offsets)
+logging.debug("Foreign keys: %s", foreign_keys)            
+
+
 '''TODO: Create discrete tables'''
 '''TODO: Discretize data'''
 '''TODO: Create discernibility matrix'''
 '''TODO: Obtain minimum matrix'''
 '''TODO: Obtain d-reduct'''
+'''TODO: Add individual record manually'''
 '''TODO: Add individual record using scripts'''
 import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
-list_tables(db, tables, headers, foreign_keys)
+print_records(get_records(db, tables, headers, foreign_keys))
+refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
+                            offsets, partition_sizes, user_input)
+print_records(get_records(db, discrete_tables, headers, foreign_keys))
