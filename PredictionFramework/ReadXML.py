@@ -21,6 +21,7 @@ import xml.sax.saxutils
 import Console
 import Util
 from locale import str
+from builtins import len
 
 
 def import_db_struct_fromXML(db):
@@ -228,14 +229,14 @@ def store_db_struct(db, tables, headers, types, user_input, attributes, discreti
     cursor.execute("DROP TABLE IF EXISTS _foreign_keys")
     create_db_struct(db)
     
-    for i, table_name in enumerate(tables):
+    for i in range(len(tables)):
         cursor.execute("INSERT INTO _tables "
                         "(name) "
                         "VALUES (?)",
                         (tables[i],))
     
     for i, table_headers in enumerate(headers):
-        for j, elem in enumerate(table_headers):
+        for j in range(len(table_headers)):
             cursor.execute("INSERT INTO _headers "
                             "(table_id, name, type, user_input, attributes, discretize, script, partition_size, offset) "
                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -243,7 +244,7 @@ def store_db_struct(db, tables, headers, types, user_input, attributes, discreti
                               attributes[i][j], discretize[i][j], scripts[i][j],
                                partition_sizes[i][j], offsets[i][j]))
     for i, foreign_key in enumerate(foreign_keys):
-        for j, elem in enumerate(foreign_key):
+        for j in range(len(foreign_key)):
             cursor.execute("INSERT INTO _foreign_keys "
                             "(table_id, name, reference) "
                             "VALUES (?, ?, ?)",
@@ -300,38 +301,38 @@ def list_structure_records(db):
     for foreign_key in cursor:
         print("{0[0]}: FOREIGN KEY {0[1]} {0[2]}".format(foreign_key))
 
-def list_tables(db, tables, headers, foreign_keys, references):
+def list_tables(db, tables, headers, foreign_keys):
     cursor = db.cursor()
-    vars = ''
+    var_string = ''
     table = ''
     refs = ''
     for i, table_headers in enumerate(headers):
-        for j, elem in enumerate(table_headers):
-            vars += tables[i] + "."
-            vars += headers[i][j] + ", "
-    vars = vars[:-2]
-    for i, table_name in enumerate(tables):
+        for j in range(len(table_headers)):
+            var_string += tables[i] + "."
+            var_string += headers[i][j] + ", "
+    var_string = var_string[:-2]
+    for i in range(len(tables)):
         table += tables[i] + ", "
     table = table[:-2]
-    for i, keys in enumerate(foreign_keys):
-        for j, elem in enumerate(keys):
-            refs += tables[i]+ "."
-            refs += foreign_keys[i][j]+ " = "
-            refs += references[i][j]
-            refs += ".id and "
+    for i in range(len(foreign_keys)):
+        refs += foreign_keys[i][2]+ "."
+        refs += foreign_keys[i][0]+ " = "
+        refs += foreign_keys[i][1]
+        refs += ".id and "
     refs = refs[:-5]
-    sql = 'SELECT {} FROM {} WHERE {}'.format(vars, table, refs)
+    sql = 'SELECT {} FROM {} WHERE {}'.format(var_string, table, refs)
     cursor.execute(sql)
     print("Current database:")
     for record in cursor:
         print(record)
 
 
-def import_(db, tables, headers, types, foreign_keys, references):
+def import_records_fromXML(db, tables, headers, types, foreign_keys, user_input):
     value_table = []
     value_row = []
     value = []
-    filename = Console.get_string("Import from", "filename")
+    filename = "records.xml"
+    #filename = Console.get_string("Import from", "filename")
     if not filename:
         return
     try:
@@ -346,8 +347,8 @@ def import_(db, tables, headers, types, foreign_keys, references):
         cursor.execute("DELETE FROM " + tables[i])
         for element in tree.findall(tables[i]):
             try:
-                for j, name in enumerate(table_header):
-                    if j > 0 and headers[i][j] not in foreign_keys[0]:
+                for j in range(len(table_header)):
+                    if user_input[i][j]==1:
                         if types[i][j] == "int" or types[i][j] == "float":
                             instr = 'value.append(' + types[i][j] + '(element.get("' + headers[i][j] + '")))'
                         else:
@@ -361,23 +362,29 @@ def import_(db, tables, headers, types, foreign_keys, references):
                 break
         value_table.append(value_row)
         value_row = []
-    print("Imported data:",value_table)
-    idx = 0
+    print("Imported data:", value_table)
+    ref_table_id = 0
+    main_table_id = 0
     if len(foreign_keys) > 0:
-        for i, table_keys in enumerate(foreign_keys):
-            for j, current_key in enumerate(table_keys):
-                for p, table in enumerate(tables):
-                    if table == references[i][j]:
-                        idx = p
-                for k, current_value_row in enumerate(value_table[idx]):
-                    try:
-                        key_value = get_and_set_foreign(db, tables[idx], headers[idx], current_key, references[i][j], current_value_row)
-                        value_table[i][k].append(key_value)
-                        insert_sqlite(db, tables[i], headers[i], value_table[i][k])
-                    except ValueError as err:
-                        db.rollback()
-                        print("ERROR:", err)
-                        break
+        for i, current_key in enumerate(foreign_keys):
+            for p, table in enumerate(tables):
+                '''Store the index of the table that contains the reference'''
+                if table == foreign_keys[i][1]:
+                    ref_table_id = p
+                if table == foreign_keys[i][2]:
+                    main_table_id = p
+            for k, current_value_row in enumerate(value_table[ref_table_id]):
+                try:
+                    key_value = get_and_set_foreign(db, tables[ref_table_id],
+                                                     headers[ref_table_id], 
+                                                     current_key, current_value_row)
+                    value_table[main_table_id][k].append(key_value)
+                    insert_sqlite(db, tables[main_table_id], headers[main_table_id], 
+                                  value_table[main_table_id][k])
+                except ValueError as err:
+                    db.rollback()
+                    print("ERROR:", err)
+                    break
     else:
         db.commit()
     #       count = record_count(db)
@@ -393,13 +400,13 @@ def insert_sqlite(db, tablename, headers, values):
     cursor.execute(sql, values)
 
  
-def get_and_set_foreign(db, table, header, foreign_key, reference, value_row):
-    foreign_id = get_foreign_id(db, header[1], reference, value_row[0])
+def get_and_set_foreign(db, table, header, foreign_key, value_row):
+    foreign_id = get_foreign_id(db, header[1], table, value_row[0])
     if foreign_id is not None:
         return foreign_id
     insert_sqlite(db, table, header, value_row)
     db.commit()
-    return get_foreign_id(db, header[1], reference, value_row[0])
+    return get_foreign_id(db, header[1], table, value_row[0])
 
 
 def get_foreign_id(db, header, reference, value):
@@ -407,6 +414,7 @@ def get_foreign_id(db, header, reference, value):
     cursor.execute("SELECT id FROM " + reference + " WHERE " + header + "=?",(value,))
     fields = cursor.fetchone()
     return fields[0] if fields is not None else None
+
 
 ###############################################
 db = connect("test.sdb") 
@@ -424,5 +432,13 @@ print("Partition sizes:", partition_sizes)
 print("Offsets:", offsets)
 print("Foreign keys:", foreign_keys)            
 
-#import_(db, tables, headers, types, foreign_keys)
-#list_tables(db, tables, headers, foreign_keys)
+'''TODO: Import data to tables'''
+'''TODO: Add individual record manually'''
+'''TODO: Create discrete tables'''
+'''TODO: Discretize data'''
+'''TODO: Create discernibility matrix'''
+'''TODO: Obtain minimum matrix'''
+'''TODO: Obtain d-reduct'''
+'''TODO: Add individual record using scripts'''
+import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
+list_tables(db, tables, headers, foreign_keys)
