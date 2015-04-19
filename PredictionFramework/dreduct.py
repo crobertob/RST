@@ -29,7 +29,7 @@ DISPLAY_LIMIT = 20
 def main():
     functions = dict(a=add_record, l=list_records,
                      m=list_machines, r=remove_record, i=import_,
-                     d=initialize_discrete_table, q=quit)
+                     d=initialize_discrete_table, q=quit_db)
     filename = os.path.join(os.path.dirname(__file__), "records.sdb")
     db = None
     try:
@@ -99,7 +99,7 @@ def add_record(db):
     if not input_size:
         return
     exec_time = Console.get_float("Execution time (seconds)", "execution time",
-                                   minimum="0", maximum="1"000000)
+                                   minimum="0", maximum="100000")
     if not exec_time:
         return
     machine_id = get_and_set_machine(db, machine_name, machine_freq, machine_memory)
@@ -137,8 +137,7 @@ def list_records(db):
            "WHERE records.machine_id = machines.id")
     start = None
     if record_count(db) > DISPLAY_LIMIT:
-        start = Console.get_integer("List those starting with "
-                                   "[Enter="1"]", "start="1"")
+        start = 1
         sql += " AND records.id LIKE ?"
     sql += " ORDER BY records.id"
     print()
@@ -158,8 +157,7 @@ def list_machines(db):
     sql = "SELECT id, name, freq, memory FROM machines"
     start = None
     if count > DISPLAY_LIMIT:
-        start = Console.get_integer("List those starting with "
-                                   "[Enter="1"]", "start="1"")
+        start = 1
         sql += " WHERE id LIKE ?"
     sql += " ORDER BY id"
     print()
@@ -230,7 +228,7 @@ def record_count(db):
     cursor.execute("SELECT COUNT(*) FROM records")
     return cursor.fetchone()[0]
     
-def quit(db):
+def quit_db(db):
     if db is not None:
         count = record_count(db)
         db.commit()
@@ -333,8 +331,7 @@ def list_discrete_records(db):
            "discrete_records, discrete_machines WHERE discrete_records.machine_id = discrete_machines.id")
     start = None
     if record_count(db) > DISPLAY_LIMIT:
-        start = Console.get_integer("List those starting with "
-                                   "[Enter="1"]", "start="1"")
+        start = 1
         sql += " AND discrete_records.id LIKE ?"
     sql += " ORDER BY discrete_records.id"
     print()
@@ -353,8 +350,7 @@ def list_discrete_machines(db):
     sql = "SELECT id, name, freq, memory FROM discrete_machines"
     start = None
     if count > DISPLAY_LIMIT:
-        start = Console.get_integer("List those starting with "
-                                   "[Enter="1"]", "start="1"")
+        start = 1
         sql += " WHERE id LIKE ?"
     sql += " ORDER BY id"
     print()
@@ -392,15 +388,15 @@ def get_discernibility_matrix(db):
     discrete_matrix = []
     for field in cursor:
         discrete_matrix.append([field[4],field[5],field[1],field[2]])
-    discernibility_matrix = []
     discernibility_matrix = get_relative_discernibility(discrete_matrix, target)
+    return discernibility_matrix
 #    print("Discernibility matrix:")
 #    print(discernibility_matrix)
 
 def get_relative_discernibility(m, target):
     '''construct discernibility matrix (collection) relative to current row'''
     collection = [[] for i in enumerate(m)]
-    for idx, main_row in enumerate(m):
+    for idx in range(len(m)):
         v = m[idx]
         for i, row in enumerate(m):
             if i <= idx:
@@ -414,7 +410,7 @@ def get_minimal_matrix(m):
     min_matrix = deepcopy(m)
     print(min_matrix)
     for i, main_row in enumerate(min_matrix):
-        for k, elem in enumerate(main_row):
+        for k in range(len(main_row)):
             if main_row[k] == set():
                 continue
             ''' Step 1 '''
@@ -436,7 +432,7 @@ def get_minimal_matrix(m):
        
 def matrix_elem_absorption(main_row, i, k, min_matrix):        
     for j, row in enumerate(min_matrix, start = i):
-        for l, elems in enumerate(row):
+        for l in range(len(row)):
             if i == j and k >= l or main_row[k] == set() or row[l] == set() or main_row[k].issubset(row[l]):
                 continue
             if main_row[k].issuperset(row[l]):
@@ -444,26 +440,50 @@ def matrix_elem_absorption(main_row, i, k, min_matrix):
     return min_matrix
     
     
-def matrix_deletion(main_row, i, k, min_matrix):
-    a = main_row[k].pop()
-    print("a:", a)
-    A = main_row[k].copy()
-    print("A:", A)
-    main_row[k].add(a)
+def deletion_no_empty_sets(A, i, k, min_matrix):
+    for j, row in enumerate(min_matrix, start = i):
+        for l in range(len(row)):
+            if (i == j and k >= l) or row[l] == set():
+                continue
+            elif row[l].difference(A) == set():
+                return False
+    return True
+
+
+def delete_matrix_elements(main_row, i, k, A, min_matrix):
     print("Main row set:", main_row[k])
     main_row[k].difference_update(A)
     print("New main row set:", main_row[k])
     for j, row in enumerate(min_matrix, start = i):
-        for l, elems in enumerate(row):
-            if i == j and k >= l or main_row[k] == set() or row[l] == set():
+        for l in range(len(row)):
+            if i == j and k >= l or row[l] == set():
                 continue
             row[l].difference_update(A)
+    return min_matrix
+
+
+def matrix_deletion(main_row, i, k, min_matrix):
+    a = main_row[k].copy()
+    found_A = False
+    if len(a) > 1:
+        A = a.pop()
+        while A != set():
+            found_A = deletion_no_empty_sets(A, i, k, min_matrix)
+            if found_A:
+                break
+            else:
+                A = a.pop()
+                print("a:", a)
+                print("A:", A)
+        print("Final A:", A)
+        if A != set():
+            min_matrix = delete_matrix_elements(main_row, i, k, A, min_matrix)
     return min_matrix
 
     
 def matrix_segment_absorption(main_row, i, k, min_matrix):
     for j, row in enumerate(min_matrix, start = i):
-        for l, elems in enumerate(row):
+        for l in range(len(row)):
             if i == j and k >= l or main_row[k] == set() or row[l] == set() or main_row[k].issuperset(row[l]):
                 continue
             if main_row[k].issubset(row[l]):
@@ -473,11 +493,10 @@ def matrix_segment_absorption(main_row, i, k, min_matrix):
 def get_dreduct(min_matrix):
     dreduct_set = set()
     dreduct_list = []
-    elem = []
-    for i, row in enumerate(min_matrix):
-        for j, elem in enumerate(row):
+    for row in min_matrix:
+        for j in range(len(row)):
             dreduct_set.update(row[j])
-    for i, set_elem in enumerate(dreduct_set):
+    for set_elem in dreduct_set:
         dreduct_list.append(set_elem)
     return dreduct_list
 
@@ -485,13 +504,13 @@ def get_relevant_attribute_list(min_matrix):
     attribute_set = set()
     attribute_list = []
     ''' Go through first column'''
-    for n, row in enumerate(min_matrix):
+    for row in min_matrix:
         attribute_set.update(row[0])
     attribute_list.append(sorted(attribute_set))
     attribute_set = set()
     for i, row in enumerate(min_matrix):
         ''' Go through rows '''
-        for j, elem in enumerate(row):
+        for j in range(len(row)):
             attribute_set.update(row[j])
         ''' Go through columns '''
         if i < len(min_matrix):
@@ -503,12 +522,5 @@ def get_relevant_attribute_list(min_matrix):
     return attribute_list
 
 
-def insert_sqlite(db, tablename, headers, values):
-    #cursor = db.cursor()
-    columns = ', '.join(headers)
-    placeholders = ', '.join('?' * len(values))
-    sql = 'INSERT INTO ({}) ({}) VALUES ({})'.format(headers, placeholders, values)
-    print(sql)
-    #cursor.execute(sql)
 ###############################################################
 main()
