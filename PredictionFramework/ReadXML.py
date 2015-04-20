@@ -248,32 +248,123 @@ def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize
         db.commit()
                      
 
-def add_discrete_record(db, tables, headers, types, foreign_keys, discretize, offsets,
-                         decision, partition_sizes, user_input, new_record):
+def read_record_from_scripts(headers, user_input, modules, decision):
+    idx_script = 0
+    idx_decision = 0
+    record = []
+    value = []
+    
+    for i, table_headers in enumerate(headers):
+        for j in range(len(table_headers)):
+            if user_input[i][j] == 1:
+                if decision[i][j] == 0:
+                    try:
+                        value.append(modules[idx_script].run())
+                        idx_script += 1
+                        idx_decision += 1
+                    except ValueError as err:
+                        print("ERROR:", err)
+                        break
+                else:
+                    decision_script = idx_script
+                    decision_i = i
+                    decision_j = idx_decision
+                    real_j = j
+                    idx_script += 1
+                    idx_decision += 1
+        idx_decision = 0
+        record.append(value)
+        value = []
+    logging.debug("Record added from scripts: %s", record)
+    logging.debug("i: %s, j: %s", decision_i, decision_j)
+    logging.debug("Decision script: %s", modules[decision_script])
+    return record, decision_script, decision_i, decision_j, real_j
+
+
+def discretize_record(headers, types, discretize, offsets, decision,
+                       partition_sizes, user_input, new_record):
     
     idx = 0
-    value_table = []
+    discrete_record = []
     value = []
     
     for i, table_headers in enumerate(headers):
         for j in range(len(table_headers)):
             if user_input[i][j] == 1:
                 if discretize[i][j] == 1:
-                    if types[i][j] == "int":
-                        value.append(int(ceil(int(new_record[i][idx]/
-                                             partition_sizes[i][j]))) + offsets[i][j])
-                        idx += 1
-                    elif types[i][j] == "float":
-                        value.append(int(ceil(float(new_record[i][idx]/
-                                               partition_sizes[i][j]))) + offsets[i][j])
-                        idx += 1
+                    if decision[i][j] == 0:
+                        if types[i][j] == "int":
+                            value.append(int(ceil(int(new_record[i][idx]/
+                                                 partition_sizes[i][j]))) + offsets[i][j])
+                            idx += 1
+                        elif types[i][j] == "float":
+                            value.append(int(ceil(float(new_record[i][idx]/
+                                                   partition_sizes[i][j]))) + offsets[i][j])
+                            idx += 1
                 else:
                     value.append(new_record[i][idx])
                     idx += 1
-        value_table.append(value)
+        discrete_record.append(value)
         value = []
         idx = 0
-    logging.debug("Record to be added: %s", value_table)
+    logging.debug("Discrete record: %s", discrete_record)
+    return discrete_record
+                    
+def obtain_real_decision(record, discrete_record, decision_script, decision_i, decision_j, real_j,
+                          modules, types, discretize, partition_sizes, offsets):
+    decision_value = modules[decision_script].run()
+    if discretize[decision_i][real_j] == 1:
+        if types[decision_i][real_j] == "int" or types[decision_i][real_j] == "float":
+            decision_discrete_value = int(ceil(decision_value/partition_sizes[decision_i][real_j])) + offsets[decision_i][real_j]
+        else:
+            decision_discrete_value = decision_value
+    else:
+        decision_discrete_value = decision_value
+    new_record = add_decision_to_record(record, decision_value, decision_i,
+                                         decision_j)
+    new_discrete_record = add_decision_to_record(discrete_record, decision_discrete_value,
+                                                  decision_i, decision_j)
+    return new_record, new_discrete_record
+
+
+def add_decision_to_record(record, decision_value, decision_i, decision_j):
+    record[decision_i].insert(decision_j, decision_value)
+    return record
+
+    
+def store_record_in_DB(db, tables, headers, foreign_keys, new_record):
+    
+    logging.debug("Record to be added: %s", new_record)
+    ref_table_id = 0
+    main_table_id = 0
+    if len(foreign_keys) > 0:
+        for i, current_key in enumerate(foreign_keys):
+            for p, table in enumerate(tables):
+                '''Store the index of the table that contains the reference'''
+                if table == foreign_keys[i][1]:
+                    ref_table_id = p
+                if table == foreign_keys[i][2]:
+                    main_table_id = p
+            try:
+                key_value = get_and_set_foreign(db, tables[ref_table_id],
+                                                  headers[ref_table_id], 
+                                                  current_key, new_record[ref_table_id])
+                new_record[main_table_id].append(key_value)
+                insert_sqlite(db, tables[main_table_id], headers[main_table_id], 
+                               new_record[main_table_id])
+            except ValueError as err:
+                db.rollback()
+                print("ERROR:", err)
+                break
+    else:
+        db.commit()
+
+
+
+def store_discrete_record(db, discrete_tables, headers, foreign_keys,
+                         discrete_record):
+    
+    logging.debug("Discrete record to be added: %s", discrete_record)
     ref_table_id = 0
     main_table_id = 0
     if len(foreign_keys) > 0:
@@ -287,10 +378,10 @@ def add_discrete_record(db, tables, headers, types, foreign_keys, discretize, of
             try:
                 key_value = get_and_set_foreign(db, discrete_tables[ref_table_id],
                                                   headers[ref_table_id], 
-                                                  current_key, value_table[ref_table_id])
-                value_table[main_table_id].append(key_value)
+                                                  current_key, discrete_record[ref_table_id])
+                discrete_record[main_table_id].append(key_value)
                 insert_sqlite(db, discrete_tables[main_table_id], headers[main_table_id], 
-                               value_table[main_table_id])
+                               discrete_record[main_table_id])
             except ValueError as err:
                 db.rollback()
                 print("ERROR:", err)
@@ -723,6 +814,7 @@ def insert_sqlite(db, tablename, headers, values):
     columns = columns[4:]
     placeholders = ', '.join('?' * len(values))
     sql = 'INSERT INTO {} ({}) VALUES ({})'.format(tablename, columns, placeholders)
+    logging.debug("SQL: %s", sql)
     cursor.execute(sql, values)
 
  
@@ -751,12 +843,21 @@ def import_modules(scripts):
     modules = map(__import__, moduleNames)
     return list(modules)
 ###############################################
+''' Change level from DEBUG to avoid showing messages'''
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+''' Connect to test.sdb database, change as required'''
 db = connect("test.sdb") 
+
+'''#############################################################################'''
+''' Initialize tables'''
+
+''' Import the database structure from tables.xml file in same directory; 
+store the structure in the database and create the required tables if they don't exist'''
 import_db_struct_fromXML(db)
+''' If the db_struct is not imported, we can read the structure directly from the db'''
 (tables, discrete_tables, headers, types, user_input, discretize, scripts,
             partition_sizes, offsets, decision, foreign_keys) = get_db_struct(db)
-
+''' Print db structure'''
 logging.debug("Tables: %s", tables)
 logging.debug("Discrete Tables: %s", discrete_tables)
 logging.debug("Headers: %s", headers)
@@ -768,42 +869,61 @@ logging.debug("Partition sizes: %s", partition_sizes)
 logging.debug("Offsets: %s", offsets)
 logging.debug("Decision: %s", decision)
 logging.debug("Foreign keys: %s", foreign_keys)            
+''' Import records from XML if available'''
+import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
+''' Print regular DB for debugging purposes'''
+print_records(get_records(db, tables, headers, foreign_keys))
+''' Discretize imported values'''
+refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
+                            offsets, decision, partition_sizes, user_input)
+''' Print discrete DB for debugging'''
+print_records(get_records(db, discrete_tables, headers, foreign_keys))
+'''#############################################################################'''
+''' Rough Set Theory part'''
+''' Obtain discernibility matrix, probably this could be in one function'''
+discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
+                                                  foreign_keys, discretize, decision)
+min_matrix = get_minimal_matrix(discernibility_matrix)
+logging.debug("Minimal matrix: %s", min_matrix)
+''' Obtain the d-reduct of the matrix'''
+dreduct = get_dreduct(min_matrix)
+logging.debug("D-reduct: %s", dreduct)
+''' Obtain the list of relevant attributes'''
+'''TODO: Map this list to the actual indices'''
+relevant_attribute_list = get_relevant_attribute_list(min_matrix)
+logging.debug("Relevant attribute list: %s", relevant_attribute_list)
 
+'''#############################################################################'''
+''' Prediction part'''
+''' Importing relevant modules from script list'''
+modules = import_modules(scripts)
+''' Add individual record using scripts'''
+(record, decision_script, decision_i, decision_j, real_j) = \
+    read_record_from_scripts(headers, user_input, modules, decision)
+''' Discretize new record '''
+discrete_record = discretize_record(headers, types, discretize, offsets, decision,
+                       partition_sizes, user_input, record)
 
-'''TODO: Add individual record manually to original DB using arguments'''
 '''TODO: The decision variable can not be an argument'''
-'''TODO: Add individual record using scripts'''
 '''TODO: Translate relevant attributes into reduced decision table'''
 '''TODO: Implement Prediction algorithm'''
 '''TODO: First search for the records that match'''
 '''TODO: Next average the execution time of all this record'''
 '''TODO: Show prediction result'''
-'''TODO: Measure execution time using script'''
-import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
+'''TODO: Export DB options'''
+
+''' Measure execution time using script and append to records'''
+record, discrete_record = obtain_real_decision(record, discrete_record, decision_script, 
+                                                decision_i, decision_j, real_j, 
+                                                modules, types, discretize, partition_sizes, 
+                                                offsets)
+''' Store individual record in original DB'''
+store_record_in_DB(db, tables, headers, foreign_keys, record)
+
+''' Store discrete record in discrete DB'''
+store_discrete_record(db, discrete_tables, headers, foreign_keys,
+                         discrete_record)
+''' Print regular DB for debugging purposes'''
 print_records(get_records(db, tables, headers, foreign_keys))
-refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
-                            offsets, decision, partition_sizes, user_input)
+''' Print discrete DB for debugging'''
 print_records(get_records(db, discrete_tables, headers, foreign_keys))
-discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
-                                                  foreign_keys, discretize, decision)
-min_matrix = get_minimal_matrix(discernibility_matrix)
-logging.debug("Minimal matrix: %s", min_matrix)
-dreduct = get_dreduct(min_matrix)
-logging.debug("D-reduct: %s", dreduct)
-relevant_attribute_list = get_relevant_attribute_list(min_matrix)
-logging.debug("Relevant attribute list: %s", relevant_attribute_list)
-new_record = [[10, 900.0], ['Four', 1, 1]]
-add_discrete_record(db, tables, headers, types, foreign_keys, discretize, offsets,
-                         decision, partition_sizes, user_input, new_record)
-print_records(get_records(db, discrete_tables, headers, foreign_keys))
-discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
-                                                  foreign_keys, discretize, decision)
-min_matrix = get_minimal_matrix(discernibility_matrix)
-logging.debug("Minimal matrix: %s", min_matrix)
-dreduct = get_dreduct(min_matrix)
-logging.debug("D-reduct: %s", dreduct)
-relevant_attribute_list = get_relevant_attribute_list(min_matrix)
-logging.debug("Relevant attribute list: %s", relevant_attribute_list)
-modules = import_modules(scripts)
-test = modules[1].run()
-print(test)
