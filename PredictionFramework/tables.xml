@@ -2,15 +2,15 @@
 <tables>
     <main_table name="records">
         <field name="id" type="int" user_input="0" field_attr="INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL" discretize="0" script="" partition_size="" offset="" decision="0"></field>
-        <field name="input_size" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="input_size.py" partition_size="2" offset="0" decision="0"></field>
-        <field name="exec_time" type="float" user_input="1" field_attr="REAL NOT NULL" discretize="1" script="exec_time.py" partition_size="200" offset="0" decision="1"></field>
+        <field name="input_size" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="input_size" partition_size="2" offset="0" decision="0"></field>
+        <field name="exec_time" type="float" user_input="1" field_attr="REAL NOT NULL" discretize="1" script="exec_time" partition_size="200" offset="0" decision="1"></field>
         <field name="machine_id" type="int" user_input="0" field_attr="INTEGER NOT NULL" discretize="0" script="" partition_size="" offset="" decision="0"></field>
         <foreign_key name="machine_id" reference="machines"></foreign_key>
     </main_table>
         <table name="machines">
         <field name = "id" type="int" user_input="0" field_attr="INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL" discretize="0" script="" partition_size="" offset="" decision="0"></field>
         <field name = "name" type="text" user_input="1" field_attr="TEXT UNIQUE NOT NULL" discretize="0" script="" partition_size="" offset="" decision="0"></field>
-        <field name = "freq" type="float" user_input="1" field_attr="REAL NOT NULL" discretize="1" script="machine_freq.py" partition_size="1" offset="0" decision="0"></field>
-        <field name = "memory" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="machine_mem.py" partition_size="1" offset="0" decision="0"></field>
+        <field name = "freq" type="float" user_input="1" field_attr="REAL NOT NULL" discretize="1" script="machine_freq" partition_size="1" offset="0" decision="0"></field>
+        <field name = "memory" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="machine_mem" partition_size="1" offset="0" decision="0"></field>
     </table>
 </tables>

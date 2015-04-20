@@ -742,7 +742,14 @@ def get_foreign_id(db, header, reference, value):
     fields = cursor.fetchone()
     return fields[0] if fields is not None else None
 
-
+def import_modules(scripts):
+    moduleNames = []
+    for table in scripts:
+        for script in table:
+            if script != '':
+                moduleNames.append(script)
+    modules = map(__import__, moduleNames)
+    return list(modules)
 ###############################################
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 db = connect("test.sdb") 
@@ -763,8 +770,15 @@ logging.debug("Decision: %s", decision)
 logging.debug("Foreign keys: %s", foreign_keys)            
 
 
-'''TODO: Add individual record manually'''
+'''TODO: Add individual record manually to original DB using arguments'''
+'''TODO: The decision variable can not be an argument'''
 '''TODO: Add individual record using scripts'''
+'''TODO: Translate relevant attributes into reduced decision table'''
+'''TODO: Implement Prediction algorithm'''
+'''TODO: First search for the records that match'''
+'''TODO: Next average the execution time of all this record'''
+'''TODO: Show prediction result'''
+'''TODO: Measure execution time using script'''
 import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
 print_records(get_records(db, tables, headers, foreign_keys))
 refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
@@ -778,9 +792,9 @@ dreduct = get_dreduct(min_matrix)
 logging.debug("D-reduct: %s", dreduct)
 relevant_attribute_list = get_relevant_attribute_list(min_matrix)
 logging.debug("Relevant attribute list: %s", relevant_attribute_list)
-new_records = [[10, 900.0], ['Four', 1, 1]]
+new_record = [[10, 900.0], ['Four', 1, 1]]
 add_discrete_record(db, tables, headers, types, foreign_keys, discretize, offsets,
-                         decision, partition_sizes, user_input, new_records)
+                         decision, partition_sizes, user_input, new_record)
 print_records(get_records(db, discrete_tables, headers, foreign_keys))
 discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
                                                   foreign_keys, discretize, decision)
@@ -790,3 +804,6 @@ dreduct = get_dreduct(min_matrix)
 logging.debug("D-reduct: %s", dreduct)
 relevant_attribute_list = get_relevant_attribute_list(min_matrix)
 logging.debug("Relevant attribute list: %s", relevant_attribute_list)
+modules = import_modules(scripts)
+test = modules[1].run()
+print(test)
