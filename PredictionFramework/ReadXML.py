@@ -39,6 +39,7 @@ def import_db_struct_fromXML(db):
     scripts = []
     partition_sizes = []
     offsets = []
+    decision = []
     foreign_keys = []
     references = []
     header_list = []
@@ -49,6 +50,7 @@ def import_db_struct_fromXML(db):
     script_list = []
     partition_size_list = []
     offset_list = []
+    decision_list = []
     foreign_key_list = []
     reference_list = []
     #filename = Console.get_string("Import from", "filename")
@@ -77,6 +79,7 @@ def import_db_struct_fromXML(db):
                 script_list.append(field.get("script"))
                 partition_size_list.append(field.get("partition_size"))
                 offset_list.append(field.get("offset"))
+                decision_list.append(field.get("decision"))
             except ValueError as err:
                 print("ERROR:", err)
                 break
@@ -95,6 +98,7 @@ def import_db_struct_fromXML(db):
         scripts.append(script_list)
         partition_sizes.append(partition_size_list)
         offsets.append(offset_list)
+        decision.append(decision_list)
         foreign_keys.append(foreign_key_list)
         references.append(reference_list)
         header_list = []
@@ -105,6 +109,7 @@ def import_db_struct_fromXML(db):
         script_list = []
         partition_size_list = []
         offset_list = []
+        decision_list = []
         foreign_key_list = []
         reference_list = []
     
@@ -124,6 +129,7 @@ def import_db_struct_fromXML(db):
                 script_list.append(field.get("script"))
                 partition_size_list.append(field.get("partition_size"))
                 offset_list.append(field.get("offset"))
+                decision_list.append(field.get("decision"))
             except ValueError as err:
                 print("ERROR:", err)
                 break
@@ -135,6 +141,7 @@ def import_db_struct_fromXML(db):
         scripts.append(script_list)
         partition_sizes.append(partition_size_list)
         offsets.append(offset_list)
+        decision.append(decision_list)
         header_list = []
         type_list = []
         user_input_list = []
@@ -143,8 +150,9 @@ def import_db_struct_fromXML(db):
         script_list = []
         partition_size_list = []
         offset_list = []
+        decision_list = []
     store_db_struct(db, tables, headers, types, user_input, attributes, discretize, 
-                    scripts, partition_sizes, offsets, foreign_keys, references)
+                    scripts, partition_sizes, offsets, decision, foreign_keys, references)
     discrete_tables = list_discrete_tables(tables)
     discrete_attributes = change_to_discrete_attrib(attributes)
     print(discrete_attributes)
@@ -183,7 +191,7 @@ def drop_tables(db, tables):
 
 
 def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
-                            offsets, partition_sizes, user_input):
+                            offsets, decision, partition_sizes, user_input):
     value_table = []
     value = []
 
@@ -238,12 +246,56 @@ def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize
                     break
     else:
         db.commit()
-
 #    discrete_records = get_records(db, discrete_tables, headers, foreign_keys)
 #    print_records(discrete_records)
     #get_discernibility_matrix(db)
                      
-                        
+
+def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
+                               decision):
+    discrete_records = get_records(db, tables, headers, foreign_keys)
+    discrete_matrix = []
+    discrete_row = []
+    current_col = 0
+    decision_value = 0
+    
+    for k, field in enumerate(discrete_records):
+        for i, table_headers in enumerate(headers):
+            for j in range(len(table_headers)):
+                if discretize[i][j] == 1:
+                    '''Decision value should be appended last to the row'''
+                    if decision[i][j] == 0:
+                        discrete_row.append(field[i*len(table_headers)+j])
+                        if k == 0 and i == 0:
+                            current_col += 1
+                    elif decision[i][j] == 1:
+                        '''Because of this it will only work with ONE decision value'''
+                        decision_value = field[i*len(table_headers)+j]
+                        target = len(table_headers) - 1
+        discrete_row.append(decision_value)
+        discrete_matrix.append(discrete_row)
+        discrete_row = []
+    logging.debug("Discrete matrix %s", discrete_matrix)
+    logging.debug("Target: %s", target)
+    discernibility_matrix = get_relative_discernibility(discrete_matrix, target)
+#    return discernibility_matrix
+    print("Discernibility matrix:")
+    print(discernibility_matrix)
+
+
+def get_relative_discernibility(m, target):
+    '''construct discernibility matrix (collection) relative to current row'''
+    collection = [[] for i in enumerate(m)]
+    for idx in range(len(m)):
+        v = m[idx]
+        for i, row in enumerate(m):
+            if i <= idx:
+                continue
+            collection[i].append(set([(j + 1) for j in range(len(v)-1) if (v[j] != row[j] and v[target] != row[target])]))
+    del collection[0]
+#    get_minimal_matrix(collection)
+    return collection
+                    
 def get_records(db, tables, headers, foreign_keys):
     cursor = db.cursor()
     var_string = ''
@@ -312,6 +364,7 @@ def get_db_struct(db):
     scripts = []
     partition_sizes = []
     offsets = []
+    decision = []
     foreign_keys = []
     
     '''Get table names'''
@@ -330,7 +383,7 @@ def get_db_struct(db):
         scripts.append(get_attrib_from_headers(db, "script", table_id))
         partition_sizes.append(get_attrib_from_headers(db, "partition_size", table_id))
         offsets.append(get_attrib_from_headers(db, "offset", table_id))
-    
+        decision.append(get_attrib_from_headers(db, "decision", table_id))
     '''Get foreign keys'''
     cursor = db.cursor()
     sql = ("SELECT _foreign_keys.name, _foreign_keys.reference, _tables.name "
@@ -342,7 +395,7 @@ def get_db_struct(db):
     
     discrete_tables = list_discrete_tables(tables)
     return (tables, discrete_tables, headers, types, user_input, discretize, scripts,
-            partition_sizes, offsets, foreign_keys)
+            partition_sizes, offsets, decision, foreign_keys)
 
 
 def get_attrib_from_headers(db, var, table_id):
@@ -360,7 +413,7 @@ def get_attrib_from_headers(db, var, table_id):
 
         
 def store_db_struct(db, tables, headers, types, user_input, attributes, discretize, 
-                    scripts, partition_sizes, offsets, foreign_keys, references):
+                    scripts, partition_sizes, offsets, decision, foreign_keys, references):
     cursor = db.cursor()
     cursor.execute("DROP TABLE IF EXISTS _tables")
     cursor.execute("DROP TABLE IF EXISTS _headers")
@@ -376,11 +429,11 @@ def store_db_struct(db, tables, headers, types, user_input, attributes, discreti
     for i, table_headers in enumerate(headers):
         for j in range(len(table_headers)):
             cursor.execute("INSERT INTO _headers "
-                            "(table_id, name, type, user_input, attributes, discretize, script, partition_size, offset) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "(table_id, name, type, user_input, attributes, discretize, script, partition_size, offset, decision) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (i + 1, headers[i][j], types[i][j], user_input[i][j],
                               attributes[i][j], discretize[i][j], scripts[i][j],
-                               partition_sizes[i][j], offsets[i][j]))
+                               partition_sizes[i][j], offsets[i][j], decision[i][j]))
     for i, foreign_key in enumerate(foreign_keys):
         for j in range(len(foreign_key)):
             cursor.execute("INSERT INTO _foreign_keys "
@@ -413,7 +466,8 @@ def create_db_struct(db):
             "discretize INTEGER NOT NULL, "
             "script TEXT, "
             "partition_size INTEGER, "
-            "offset INTEGER) ")
+            "offset INTEGER, "
+            "decision INTEGER) ")
     cursor.execute("CREATE TABLE IF NOT EXISTS _foreign_keys ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, "
             "table_id INTEGER NOT NULL, "
@@ -533,7 +587,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 db = connect("test.sdb") 
 import_db_struct_fromXML(db)
 (tables, discrete_tables, headers, types, user_input, discretize, scripts,
-            partition_sizes, offsets, foreign_keys) = get_db_struct(db)
+            partition_sizes, offsets, decision, foreign_keys) = get_db_struct(db)
 
 logging.debug("Tables: %s", tables)
 logging.debug("Discrete Tables: %s", discrete_tables)
@@ -544,11 +598,11 @@ logging.debug("Discretize: %s", discretize)
 logging.debug("Scripts: %s", scripts)
 logging.debug("Partition sizes: %s", partition_sizes)
 logging.debug("Offsets: %s", offsets)
+logging.debug("Decision: %s", decision)
 logging.debug("Foreign keys: %s", foreign_keys)            
 
 
-'''TODO: Create discrete tables'''
-'''TODO: Discretize data'''
+'''TODO: Get discretized data'''
 '''TODO: Create discernibility matrix'''
 '''TODO: Obtain minimum matrix'''
 '''TODO: Obtain d-reduct'''
@@ -557,5 +611,7 @@ logging.debug("Foreign keys: %s", foreign_keys)
 import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
 print_records(get_records(db, tables, headers, foreign_keys))
 refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
-                            offsets, partition_sizes, user_input)
+                            offsets, decision, partition_sizes, user_input)
 print_records(get_records(db, discrete_tables, headers, foreign_keys))
+get_discernibility_matrix(db, discrete_tables, headers, foreign_keys, discretize,
+                           decision)
