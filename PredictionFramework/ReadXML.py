@@ -22,6 +22,7 @@ import xml.sax.saxutils
 import Console
 import Util
 from builtins import len
+from copy import deepcopy
 from locale import str
 from math import ceil
 
@@ -293,8 +294,134 @@ def get_relative_discernibility(m, target):
                 continue
             collection[i].append(set([(j + 1) for j in range(len(v)-1) if (v[j] != row[j] and v[target] != row[target])]))
     del collection[0]
-#    get_minimal_matrix(collection)
+    get_minimal_matrix(collection)
     return collection
+
+
+def get_minimal_matrix(m):
+    min_matrix = deepcopy(m)
+    print(min_matrix)
+    for i, main_row in enumerate(min_matrix):
+        for k in range(len(main_row)):
+            print("Main row:", main_row[k])
+            print("Step 1")
+            if main_row[k] == set():
+                continue
+            ''' Step 1 '''
+            if len(main_row[k]) > 1:
+                min_matrix = matrix_elem_absorption(main_row, i, k, min_matrix)
+                print("After absorption:", min_matrix)
+            ''' Step 2 '''
+            print("Step 2")
+            if len(main_row[k]) > 1:
+                min_matrix = matrix_deletion(main_row, i, k, min_matrix)
+                print("After deletion:",min_matrix)
+            ''' Step 3 '''
+            print("Step 3")
+            min_matrix = matrix_segment_absorption(main_row, i, k, min_matrix)
+    print("Minimal matrix:", min_matrix)
+    dreduct = get_dreduct(min_matrix)
+    print("D-reduct:", dreduct)
+    relevant_attribute_list = get_relevant_attribute_list(min_matrix)
+    print("Relevant attribute list:", relevant_attribute_list)
+
+       
+def matrix_elem_absorption(main_row, i, k, min_matrix):        
+    for j, row in enumerate(min_matrix, start = i):
+        for l in range(len(row)):
+            if i == j and k >= l or main_row[k] == set() or row[l] == set() or main_row[k].issubset(row[l]):
+                continue
+            if main_row[k].issuperset(row[l]):
+                main_row[k] = row[l]
+    return min_matrix
+    
+    
+def deletion_no_empty_sets(A, i, k, min_matrix):
+    for j, row in enumerate(min_matrix, start = i):
+        for l in range(len(row)):
+            current_value = row[l].difference(A)
+            if (i == j and k >= l) or row[l] == set():
+                continue
+            elif current_value == set():
+                return False
+    return True
+
+
+def delete_matrix_elements(main_row, i, k, A, min_matrix):
+    print("Main row set:", main_row[k])
+    main_row[k].difference_update(A)
+    print("New main row set:", main_row[k])
+    for j, row in enumerate(min_matrix, start = i):
+        for l in range(len(row)):
+            if i == j and k >= l or row[l] == set():
+                continue
+            row[l].difference_update(A)
+    return min_matrix
+
+
+def matrix_deletion(main_row, i, k, min_matrix):
+    a = main_row[k].copy()
+    print("a:", a)
+    found_A = False
+    if len(a) > 1:
+        A = {a.pop()}
+        print("A:", A)
+        while A != set():
+            found_A = deletion_no_empty_sets(A, i, k, min_matrix)
+            if found_A:
+                break
+            else:
+                A = set(a.pop())
+                print("a:", a)
+                print("A:", A)
+        print("Final A:", A)
+        if A != set():
+            min_matrix = delete_matrix_elements(main_row, i, k, A, min_matrix)
+    return min_matrix
+
+    
+def matrix_segment_absorption(main_row, i, k, min_matrix):
+    for j, row in enumerate(min_matrix, start = i):
+        for l in range(len(row)):
+            if i == j and k >= l or main_row[k] == set() or row[l] == set() or main_row[k].issuperset(row[l]):
+                continue
+            if main_row[k].issubset(row[l]):
+                row[l] = main_row[k]
+    return min_matrix
+
+
+def get_dreduct(min_matrix):
+    dreduct_set = set()
+    dreduct_list = []
+    for row in min_matrix:
+        for j in range(len(row)):
+            dreduct_set.update(row[j])
+    for set_elem in dreduct_set:
+        dreduct_list.append(set_elem)
+    return dreduct_list
+
+
+def get_relevant_attribute_list(min_matrix):
+    attribute_set = set()
+    attribute_list = []
+    ''' Go through first column'''
+    for row in min_matrix:
+        attribute_set.update(row[0])
+    attribute_list.append(sorted(attribute_set))
+    attribute_set = set()
+    for i, row in enumerate(min_matrix):
+        ''' Go through rows '''
+        for j in range(len(row)):
+            attribute_set.update(row[j])
+        ''' Go through columns '''
+        if i < len(min_matrix):
+            for k, inner_row in enumerate(min_matrix):
+                if k > i:
+                    attribute_set.update(inner_row[i + 1])
+        attribute_list.append(sorted(attribute_set))
+        attribute_set = set()
+    return attribute_list
+
                     
 def get_records(db, tables, headers, foreign_keys):
     cursor = db.cursor()
