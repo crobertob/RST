@@ -396,8 +396,11 @@ def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
     discrete_records = get_records(db, tables, headers, foreign_keys)
     discrete_matrix = []
     discrete_row = []
-    current_col = 0
     decision_value = 0
+    map_i = []
+    map_j = []
+    decision_i = 0
+    decision_j = 0
     
     for k, field in enumerate(discrete_records):
         for i, table_headers in enumerate(headers):
@@ -406,19 +409,26 @@ def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
                     '''Decision value should be appended last to the row'''
                     if decision[i][j] == 0:
                         discrete_row.append(field[i*len(table_headers)+j])
-                        if k == 0 and i == 0:
-                            current_col += 1
+                        if k == 0:
+                            map_i.append(i)
+                            map_j.append(j)
                     elif decision[i][j] == 1:
                         '''Because of this it will only work with ONE decision value'''
                         decision_value = field[i*len(table_headers)+j]
                         target = len(table_headers) - 1
+                        decision_i = i
+                        decision_j = j
         discrete_row.append(decision_value)
         discrete_matrix.append(discrete_row)
         discrete_row = []
-    logging.debug("Discrete matrix %s", discrete_matrix)
+    map_i.append(decision_i)
+    map_j.append(decision_j)
+    logging.debug("Map i: %s", map_i)
+    logging.debug("Map j: %s", map_j)
+    logging.debug("Discrete matrix: %s", discrete_matrix)
     logging.debug("Target: %s", target)
     discernibility_matrix = get_relative_discernibility(discrete_matrix, target)
-    return discernibility_matrix
+    return discernibility_matrix, map_i, map_j
 
 
 def get_relative_discernibility(m, target):
@@ -881,7 +891,7 @@ print_records(get_records(db, discrete_tables, headers, foreign_keys))
 '''#############################################################################'''
 ''' Rough Set Theory part'''
 ''' Obtain discernibility matrix, probably this could be in one function'''
-discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
+discernibility_matrix, map_i, map_j = get_discernibility_matrix(db, discrete_tables, headers, 
                                                   foreign_keys, discretize, decision)
 min_matrix = get_minimal_matrix(discernibility_matrix)
 logging.debug("Minimal matrix: %s", min_matrix)
