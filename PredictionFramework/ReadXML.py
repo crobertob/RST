@@ -156,7 +156,6 @@ def import_db_struct_fromXML(db):
                     scripts, partition_sizes, offsets, decision, foreign_keys, references)
     discrete_tables = list_discrete_tables(tables)
     discrete_attributes = change_to_discrete_attrib(attributes)
-    print(discrete_attributes)
     create_tables(db, tables, headers, attributes, foreign_keys, references)
     create_tables(db, discrete_tables, headers, discrete_attributes, foreign_keys, references)
     list_structure_records(db)    
@@ -222,7 +221,7 @@ def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize
                 db.rollback()
                 print("ERROR:", err)
                 break
-    print("Imported data:", value_table)
+    logging.debug("Imported data: %s", value_table)
     ref_table_id = 0
     main_table_id = 0
     if len(foreign_keys) > 0:
@@ -247,10 +246,59 @@ def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize
                     break
     else:
         db.commit()
-#    discrete_records = get_records(db, discrete_tables, headers, foreign_keys)
-#    print_records(discrete_records)
-    #get_discernibility_matrix(db)
                      
+
+def add_discrete_record(db, tables, headers, types, foreign_keys, discretize, offsets,
+                         decision, partition_sizes, user_input, new_record):
+    
+    idx = 0
+    value_table = []
+    value = []
+    
+    for i, table_headers in enumerate(headers):
+        for j in range(len(table_headers)):
+            if user_input[i][j] == 1:
+                if discretize[i][j] == 1:
+                    if types[i][j] == "int":
+                        value.append(int(ceil(int(new_record[i][idx]/
+                                             partition_sizes[i][j]))) + offsets[i][j])
+                        idx += 1
+                    elif types[i][j] == "float":
+                        value.append(int(ceil(float(new_record[i][idx]/
+                                               partition_sizes[i][j]))) + offsets[i][j])
+                        idx += 1
+                else:
+                    value.append(new_record[i][idx])
+                    idx += 1
+        value_table.append(value)
+        value = []
+        idx = 0
+    logging.debug("Record to be added: %s", value_table)
+    ref_table_id = 0
+    main_table_id = 0
+    if len(foreign_keys) > 0:
+        for i, current_key in enumerate(foreign_keys):
+            for p, table in enumerate(discrete_tables):
+                '''Store the index of the table that contains the reference'''
+                if table == "discrete_" + foreign_keys[i][1]:
+                    ref_table_id = p
+                if table == "discrete_" + foreign_keys[i][2]:
+                    main_table_id = p
+            try:
+                key_value = get_and_set_foreign(db, discrete_tables[ref_table_id],
+                                                  headers[ref_table_id], 
+                                                  current_key, value_table[ref_table_id])
+                value_table[main_table_id].append(key_value)
+                insert_sqlite(db, discrete_tables[main_table_id], headers[main_table_id], 
+                               value_table[main_table_id])
+            except ValueError as err:
+                db.rollback()
+                print("ERROR:", err)
+                break
+    else:
+        db.commit()
+
+
 
 def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
                                decision):
@@ -279,9 +327,7 @@ def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
     logging.debug("Discrete matrix %s", discrete_matrix)
     logging.debug("Target: %s", target)
     discernibility_matrix = get_relative_discernibility(discrete_matrix, target)
-#    return discernibility_matrix
-    print("Discernibility matrix:")
-    print(discernibility_matrix)
+    return discernibility_matrix
 
 
 def get_relative_discernibility(m, target):
@@ -294,37 +340,26 @@ def get_relative_discernibility(m, target):
                 continue
             collection[i].append(set([(j + 1) for j in range(len(v)-1) if (v[j] != row[j] and v[target] != row[target])]))
     del collection[0]
-    get_minimal_matrix(collection)
     return collection
 
 
 def get_minimal_matrix(m):
     min_matrix = deepcopy(m)
-    print(min_matrix)
     for i, main_row in enumerate(min_matrix):
         for k in range(len(main_row)):
-            print("Main row:", main_row[k])
-            print("Step 1")
             if main_row[k] == set():
                 continue
             ''' Step 1 '''
             if len(main_row[k]) > 1:
                 min_matrix = matrix_elem_absorption(main_row, i, k, min_matrix)
-                print("After absorption:", min_matrix)
+                logging.debug("After absorption: %s", min_matrix)
             ''' Step 2 '''
-            print("Step 2")
             if len(main_row[k]) > 1:
                 min_matrix = matrix_deletion(main_row, i, k, min_matrix)
-                print("After deletion:",min_matrix)
+                logging.debug("After deletion: %s", min_matrix)
             ''' Step 3 '''
-            print("Step 3")
             min_matrix = matrix_segment_absorption(main_row, i, k, min_matrix)
-    print("Minimal matrix:", min_matrix)
-    dreduct = get_dreduct(min_matrix)
-    print("D-reduct:", dreduct)
-    relevant_attribute_list = get_relevant_attribute_list(min_matrix)
-    print("Relevant attribute list:", relevant_attribute_list)
-
+    return min_matrix
        
 def matrix_elem_absorption(main_row, i, k, min_matrix):        
     for j, row in enumerate(min_matrix, start = i):
@@ -348,9 +383,9 @@ def deletion_no_empty_sets(A, i, k, min_matrix):
 
 
 def delete_matrix_elements(main_row, i, k, A, min_matrix):
-    print("Main row set:", main_row[k])
+    logging.debug("Main row set: %s", main_row[k])
     main_row[k].difference_update(A)
-    print("New main row set:", main_row[k])
+    logging.debug("New main row set: %s", main_row[k])
     for j, row in enumerate(min_matrix, start = i):
         for l in range(len(row)):
             if i == j and k >= l or row[l] == set():
@@ -361,20 +396,20 @@ def delete_matrix_elements(main_row, i, k, A, min_matrix):
 
 def matrix_deletion(main_row, i, k, min_matrix):
     a = main_row[k].copy()
-    print("a:", a)
+    logging.debug("a: %s", a)
     found_A = False
     if len(a) > 1:
         A = {a.pop()}
-        print("A:", A)
+        logging.debug("A: %s", A)
         while A != set():
             found_A = deletion_no_empty_sets(A, i, k, min_matrix)
             if found_A:
                 break
             else:
                 A = set(a.pop())
-                print("a:", a)
-                print("A:", A)
-        print("Final A:", A)
+                logging.debug("a: %s", a)
+                logging.debug("A: %s", A)
+        logging.debug("Final A: %s", A)
         if A != set():
             min_matrix = delete_matrix_elements(main_row, i, k, A, min_matrix)
     return min_matrix
@@ -457,9 +492,9 @@ def get_records(db, tables, headers, foreign_keys):
 
     
 def print_records(cursor):    
-    print("Current database:")
+    logging.debug("Current database:")
     for record in cursor:
-        print(record)
+        logging.debug(record)
 
 
 def create_tables(db, tables, headers, attributes, foreign_keys, references):
@@ -607,10 +642,10 @@ def list_structure_records(db):
     sql = ("SELECT _tables.name, _headers.name, _headers.type, _headers.attributes"
            " FROM _tables, _headers WHERE _headers.table_id = _tables.id") 
     sql += " ORDER BY _headers.id"
-    print()
+    logging.debug("Structure:")
     cursor.execute(sql)
     for headers in cursor:
-        print("{0[0]}: {0[1]} {0[2]} {0[3]} ".format(headers))
+        logging.debug("{0[0]}: {0[1]} {0[2]} {0[3]} ".format(headers))
     
     cursor = db.cursor()
     sql = ("SELECT _tables.name, _foreign_keys.name, _foreign_keys.reference "
@@ -618,7 +653,7 @@ def list_structure_records(db):
     sql += " ORDER BY _foreign_keys.id"
     cursor.execute(sql)
     for foreign_key in cursor:
-        print("{0[0]}: FOREIGN KEY {0[1]} {0[2]}".format(foreign_key))
+        logging.debug("{0[0]}: FOREIGN KEY {0[1]} {0[2]}".format(foreign_key))
 
 
 def import_records_fromXML(db, tables, headers, types, foreign_keys, user_input):
@@ -655,7 +690,7 @@ def import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
                 break
         value_table.append(value_row)
         value_row = []
-    print("Imported data:", value_table)
+    logging.debug("Imported data: %s", value_table)
     ref_table_id = 0
     main_table_id = 0
     if len(foreign_keys) > 0:
@@ -680,8 +715,6 @@ def import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
                     break
     else:
         db.commit()
-    #       count = record_count(db)
-    #       print("Imported {0} record{1}".format(count, Util.s(count)))
 
         
 def insert_sqlite(db, tablename, headers, values):
@@ -694,6 +727,7 @@ def insert_sqlite(db, tablename, headers, values):
 
  
 def get_and_set_foreign(db, table, header, foreign_key, value_row):
+    '''TODO: Why header[1]?'''
     foreign_id = get_foreign_id(db, header[1], table, value_row[0])
     if foreign_id is not None:
         return foreign_id
@@ -729,10 +763,6 @@ logging.debug("Decision: %s", decision)
 logging.debug("Foreign keys: %s", foreign_keys)            
 
 
-'''TODO: Get discretized data'''
-'''TODO: Create discernibility matrix'''
-'''TODO: Obtain minimum matrix'''
-'''TODO: Obtain d-reduct'''
 '''TODO: Add individual record manually'''
 '''TODO: Add individual record using scripts'''
 import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
@@ -740,5 +770,23 @@ print_records(get_records(db, tables, headers, foreign_keys))
 refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
                             offsets, decision, partition_sizes, user_input)
 print_records(get_records(db, discrete_tables, headers, foreign_keys))
-get_discernibility_matrix(db, discrete_tables, headers, foreign_keys, discretize,
-                           decision)
+discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
+                                                  foreign_keys, discretize, decision)
+min_matrix = get_minimal_matrix(discernibility_matrix)
+logging.debug("Minimal matrix: %s", min_matrix)
+dreduct = get_dreduct(min_matrix)
+logging.debug("D-reduct: %s", dreduct)
+relevant_attribute_list = get_relevant_attribute_list(min_matrix)
+logging.debug("Relevant attribute list: %s", relevant_attribute_list)
+new_records = [[10, 900.0], ['Four', 1, 1]]
+add_discrete_record(db, tables, headers, types, foreign_keys, discretize, offsets,
+                         decision, partition_sizes, user_input, new_records)
+print_records(get_records(db, discrete_tables, headers, foreign_keys))
+discernibility_matrix = get_discernibility_matrix(db, discrete_tables, headers, 
+                                                  foreign_keys, discretize, decision)
+min_matrix = get_minimal_matrix(discernibility_matrix)
+logging.debug("Minimal matrix: %s", min_matrix)
+dreduct = get_dreduct(min_matrix)
+logging.debug("D-reduct: %s", dreduct)
+relevant_attribute_list = get_relevant_attribute_list(min_matrix)
+logging.debug("Relevant attribute list: %s", relevant_attribute_list)
