@@ -310,7 +310,7 @@ def discretize_record(headers, types, discretize, offsets, decision,
     logging.debug("Discrete record: %s", discrete_record)
     return discrete_record
                     
-def obtain_real_decision(record, discrete_record, decision_script, decision_i, decision_j, real_j,
+def obtain_real_decision_value(record, discrete_record, decision_script, decision_i, decision_j, real_j,
                           modules, types, discretize, partition_sizes, offsets):
     decision_value = modules[decision_script].run()
     if discretize[decision_i][real_j] == 1:
@@ -591,7 +591,39 @@ def get_records(db, tables, headers, foreign_keys):
     cursor.execute(sql)
     return cursor
 
-    
+
+def get_individual_records(db, tables, table_headers, foreign_keys):
+    cursor = db.cursor()
+    var_string = ''
+    table = ''
+    refs = ''
+    var_string += table_headers[0] + "."
+    var_string += table_headers[1] + ", "
+    var_string = var_string[:-2]
+    for table_name in tables:
+        table += table_name + ", "
+    table = table[:-2]
+    if table_headers[0].find("discrete", 0) >= 0:
+        for i in range(len(foreign_keys)):
+            refs += "discrete_"
+            refs += foreign_keys[i][2]+ "."
+            refs += foreign_keys[i][0]+ " = "
+            refs += "discrete_"
+            refs += foreign_keys[i][1]
+            refs += ".id and "
+    else:
+        for i in range(len(foreign_keys)):
+            refs += foreign_keys[i][2]+ "."
+            refs += foreign_keys[i][0]+ " = "
+            refs += foreign_keys[i][1]
+            refs += ".id and "
+    refs = refs[:-5]
+    sql = 'SELECT {} FROM {} WHERE {}'.format(var_string, table, refs)
+    logging.debug("SQL query: %s", sql)
+    cursor.execute(sql)
+    return cursor
+
+
 def print_records(cursor):    
     logging.debug("Current database:")
     for record in cursor:
@@ -852,6 +884,62 @@ def import_modules(scripts):
                 moduleNames.append(script)
     modules = map(__import__, moduleNames)
     return list(modules)
+
+def obtain_reduced_table(db, discrete_tables, tables, headers, foreign_keys,
+                          relevant_attribute_list, dreduct, map_i, map_j):
+    reduced_table = []
+    table_header_names = []
+    records = []
+    results = []
+    for attribute in dreduct:
+        reduced_table.append([])
+        i = map_i[attribute-1]
+        j = map_j[attribute-1]
+        table_header_names.append([discrete_tables[i],headers[i][j]])
+    i =  map_i[len(map_i)-1]
+    j =  map_j[len(map_j)-1]
+    table_header_names.append([tables[i],headers[i][j]])
+    logging.debug("Table-header pairs: %s", table_header_names)
+    for k in range(len(table_header_names)):
+        if k < len(table_header_names) - 1: 
+            records.append(get_individual_records(db, discrete_tables,
+                                                   table_header_names[k], foreign_keys))
+        else:
+            results_record = get_individual_records(db, tables, table_header_names[k], 
+                                                  foreign_keys)
+    #records = get_records(db, new_tables, new_headers, foreign_keys)
+    for record in results_record:
+        results.append(record[0])
+    for i, record in enumerate(records):
+        for j, value in enumerate(record):
+            if relevant_attribute_list[j].count(dreduct[i]) > 0:
+                reduced_table[i].append([value[0], results[j]])
+                logging.debug("i: %s, j:%s Value: %s, Result: %s, Relevant: %s", i, j,
+                          value[0], results[j], relevant_attribute_list[j])
+    logging.debug("Reduced table: %s", reduced_table)                        
+    return reduced_table
+
+def prediction_algorithm(discrete_record, reduced_table, dreduct, map_i, map_j, headers):
+    avg_sum = 0
+    num_records = 0
+    for i, attribute in enumerate(dreduct):
+        logging.debug("i: %s, attribute: %s", i,
+                       headers[map_i[attribute-1]][map_j[attribute-1]])
+        for record in reduced_table[i]:
+            logging.debug("record: %s map_i: %s map_j: %s", record, map_i[attribute-1],
+                          map_j[attribute-1])
+            if discrete_record[map_i[attribute-1]][map_j[attribute-1]-1] == record[0]:
+                avg_sum += record[1]
+                num_records += 1
+                logging.debug("Matched record: %s of attribute %s, exec time: %s",
+                              record[0], attribute, record[1])
+    if num_records > 0:
+        predicted_decision_value = avg_sum/num_records
+    else:
+        predicted_decision_value = -1
+    logging.debug("Predicted decision value: %s", predicted_decision_value)
+    return predicted_decision_value
+                 
 ###############################################
 ''' Change level from DEBUG to avoid showing messages'''
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
@@ -902,7 +990,10 @@ logging.debug("D-reduct: %s", dreduct)
 '''TODO: Map this list to the actual indices'''
 relevant_attribute_list = get_relevant_attribute_list(min_matrix)
 logging.debug("Relevant attribute list: %s", relevant_attribute_list)
-
+'''TODO: Translate relevant attributes into reduced decision table'''
+reduced_table = obtain_reduced_table(db, discrete_tables, tables, headers, 
+                                     foreign_keys, relevant_attribute_list,
+                                     dreduct, map_i, map_j)
 '''#############################################################################'''
 ''' Prediction part'''
 ''' Importing relevant modules from script list'''
@@ -914,16 +1005,19 @@ modules = import_modules(scripts)
 discrete_record = discretize_record(headers, types, discretize, offsets, decision,
                        partition_sizes, user_input, record)
 
+    
 '''TODO: The decision variable can not be an argument'''
-'''TODO: Translate relevant attributes into reduced decision table'''
+
 '''TODO: Implement Prediction algorithm'''
+predicted_decision_value = prediction_algorithm(discrete_record, reduced_table, 
+                                                dreduct, map_i, map_j, headers)
 '''TODO: First search for the records that match'''
 '''TODO: Next average the execution time of all this record'''
 '''TODO: Show prediction result'''
 '''TODO: Export DB options'''
 
 ''' Measure execution time using script and append to records'''
-record, discrete_record = obtain_real_decision(record, discrete_record, decision_script, 
+record, discrete_record = obtain_real_decision_value(record, discrete_record, decision_script, 
                                                 decision_i, decision_j, real_j, 
                                                 modules, types, discretize, partition_sizes, 
                                                 offsets)
