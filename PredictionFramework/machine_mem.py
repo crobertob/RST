@@ -1,2 +1,2 @@
 def run():
-    return 100
+    return 1
