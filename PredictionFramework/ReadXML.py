@@ -324,7 +324,7 @@ def obtain_real_decision_value(record, discrete_record, decision_script, decisio
                                          decision_j)
     new_discrete_record = add_decision_to_record(discrete_record, decision_discrete_value,
                                                   decision_i, decision_j)
-    return new_record, new_discrete_record
+    return new_record, new_discrete_record, decision_value
 
 
 def add_decision_to_record(record, decision_value, decision_i, decision_j):
@@ -460,6 +460,7 @@ def get_minimal_matrix(m):
                 logging.debug("After deletion: %s", min_matrix)
             ''' Step 3 '''
             min_matrix = matrix_segment_absorption(main_row, i, k, min_matrix)
+    logging.debug("Minimal matrix: %s", min_matrix)
     return min_matrix
        
 def matrix_elem_absorption(main_row, i, k, min_matrix):        
@@ -534,6 +535,7 @@ def get_dreduct(min_matrix):
             dreduct_set.update(row[j])
     for set_elem in dreduct_set:
         dreduct_list.append(set_elem)
+    logging.debug("D-reduct: %s", dreduct_list)
     return dreduct_list
 
 
@@ -556,6 +558,7 @@ def get_relevant_attribute_list(min_matrix):
                     attribute_set.update(inner_row[i + 1])
         attribute_list.append(sorted(attribute_set))
         attribute_set = set()
+    logging.debug("Relevant attribute list: %s", attribute_list)
     return attribute_list
 
                     
@@ -689,6 +692,19 @@ def get_db_struct(db):
         foreign_keys.append([key[0], key[1], key[2]])
     
     discrete_tables = list_discrete_tables(tables)
+    
+    ''' Print db structure'''
+    logging.debug("Tables: %s", tables)
+    logging.debug("Discrete Tables: %s", discrete_tables)
+    logging.debug("Headers: %s", headers)
+    logging.debug("Types: %s", types)
+    logging.debug("User input: %s", user_input)
+    logging.debug("Discretize: %s", discretize)
+    logging.debug("Scripts: %s", scripts)
+    logging.debug("Partition sizes: %s", partition_sizes)
+    logging.debug("Offsets: %s", offsets)
+    logging.debug("Decision: %s", decision)
+    logging.debug("Foreign keys: %s", foreign_keys)  
     return (tables, discrete_tables, headers, types, user_input, discretize, scripts,
             partition_sizes, offsets, decision, foreign_keys)
 
@@ -939,33 +955,22 @@ def prediction_algorithm(discrete_record, reduced_table, dreduct, map_i, map_j, 
     logging.debug("Predicted decision value: %s", predicted_decision_value)
     return predicted_decision_value
                  
-###############################################
+'''############################################################################
+                            Start main program                               '''
 ''' Change level from DEBUG to avoid showing messages'''
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 ''' Connect to test.sdb database, change as required'''
 db = connect("test.sdb") 
 
-'''#############################################################################'''
-''' Initialize tables'''
+'''#############################################################################
+                            Initialize database                              '''
 
 ''' Import the database structure from tables.xml file in same directory; 
 store the structure in the database and create the required tables if they don't exist'''
 import_db_struct_fromXML(db)
 ''' If the db_struct is not imported, we can read the structure directly from the db'''
 (tables, discrete_tables, headers, types, user_input, discretize, scripts,
-            partition_sizes, offsets, decision, foreign_keys) = get_db_struct(db)
-''' Print db structure'''
-logging.debug("Tables: %s", tables)
-logging.debug("Discrete Tables: %s", discrete_tables)
-logging.debug("Headers: %s", headers)
-logging.debug("Types: %s", types)
-logging.debug("User input: %s", user_input)
-logging.debug("Discretize: %s", discretize)
-logging.debug("Scripts: %s", scripts)
-logging.debug("Partition sizes: %s", partition_sizes)
-logging.debug("Offsets: %s", offsets)
-logging.debug("Decision: %s", decision)
-logging.debug("Foreign keys: %s", foreign_keys)            
+            partition_sizes, offsets, decision, foreign_keys) = get_db_struct(db)          
 ''' Import records from XML if available'''
 import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
 ''' Print regular DB for debugging purposes'''
@@ -975,26 +980,25 @@ refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize,
                             offsets, decision, partition_sizes, user_input)
 ''' Print discrete DB for debugging'''
 print_records(get_records(db, discrete_tables, headers, foreign_keys))
-'''#############################################################################'''
-''' Rough Set Theory part'''
+
+'''#############################################################################
+                             Rough Set Theory                            '''
 ''' Obtain discernibility matrix, probably this could be in one function'''
 discernibility_matrix, map_i, map_j = get_discernibility_matrix(db, discrete_tables, headers, 
                                                   foreign_keys, discretize, decision)
 min_matrix = get_minimal_matrix(discernibility_matrix)
-logging.debug("Minimal matrix: %s", min_matrix)
 ''' Obtain the d-reduct of the matrix'''
 dreduct = get_dreduct(min_matrix)
-logging.debug("D-reduct: %s", dreduct)
 ''' Obtain the list of relevant attributes'''
-'''TODO: Map this list to the actual indices'''
+''' Map this list to the actual indices'''
 relevant_attribute_list = get_relevant_attribute_list(min_matrix)
-logging.debug("Relevant attribute list: %s", relevant_attribute_list)
-'''TODO: Translate relevant attributes into reduced decision table'''
+
+''' Translate relevant attributes into reduced decision table'''
 reduced_table = obtain_reduced_table(db, discrete_tables, tables, headers, 
                                      foreign_keys, relevant_attribute_list,
                                      dreduct, map_i, map_j)
-'''#############################################################################'''
-''' Prediction part'''
+'''#############################################################################
+                            Obtain values for prediction                 '''
 ''' Importing relevant modules from script list'''
 modules = import_modules(scripts)
 ''' Add individual record using scripts'''
@@ -1003,23 +1007,18 @@ modules = import_modules(scripts)
 ''' Discretize new record '''
 discrete_record = discretize_record(headers, types, discretize, offsets, decision,
                        partition_sizes, user_input, record)
-
-    
-'''TODO: The decision variable can not be an argument'''
-
-'''TODO: Implement Prediction algorithm'''
+'''#############################################################################
+                                Prediction algorithm:
+         1) First search for the records that match
+         2) Next average the execution time of all these records'''
 predicted_decision_value = prediction_algorithm(discrete_record, reduced_table, 
                                                 dreduct, map_i, map_j, headers)
-'''TODO: First search for the records that match'''
-'''TODO: Next average the execution time of all this record'''
-'''TODO: Show prediction result'''
-'''TODO: Export DB options'''
 
 ''' Measure execution time using script and append to records'''
-record, discrete_record = obtain_real_decision_value(record, discrete_record, decision_script, 
-                                                decision_i, decision_j, real_j, 
-                                                modules, types, discretize, partition_sizes, 
-                                                offsets)
+record, discrete_record, real_decision_value = \
+        obtain_real_decision_value(record, discrete_record, decision_script,
+                                   decision_i, decision_j, real_j, modules, types,
+                                   discretize, partition_sizes, offsets)
 ''' Store individual record in original DB'''
 store_record_in_DB(db, tables, headers, foreign_keys, record)
 
@@ -1030,3 +1029,9 @@ store_discrete_record(db, discrete_tables, headers, foreign_keys,
 print_records(get_records(db, tables, headers, foreign_keys))
 ''' Print discrete DB for debugging'''
 print_records(get_records(db, discrete_tables, headers, foreign_keys))
+
+''' Show prediction result'''
+percent_error = abs(real_decision_value-predicted_decision_value)/real_decision_value * 100
+logging.info("Predicted value: %s Actual value: %s Percent error: %.2f%%",
+              predicted_decision_value, real_decision_value, percent_error)
+'''TODO: Export DB options'''
