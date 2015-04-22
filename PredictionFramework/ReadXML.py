@@ -926,13 +926,12 @@ def prediction_algorithm(discrete_record, reduced_table, dreduct, map_i, map_j, 
         logging.debug("i: %s, attribute: %s", i,
                        headers[map_i[attribute-1]][map_j[attribute-1]])
         for record in reduced_table[i]:
-            logging.debug("record: %s map_i: %s map_j: %s", record, map_i[attribute-1],
-                          map_j[attribute-1])
             if discrete_record[map_i[attribute-1]][map_j[attribute-1]-1] == record[0]:
                 avg_sum += record[1]
                 num_records += 1
-                logging.debug("Matched record: %s of attribute %s, exec time: %s",
-                              record[0], attribute, record[1])
+                logging.debug("Record matches: %s of %s, exec time: %s",
+                              record[0], headers[map_i[attribute-1]][map_j[attribute-1]],
+                               record[1])
     if num_records > 0:
         predicted_decision_value = avg_sum/num_records
     else:
