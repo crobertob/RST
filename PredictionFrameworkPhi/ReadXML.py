@@ -410,7 +410,7 @@ def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
     map_j = []
     decision_i = 0
     decision_j = 0
-    target = -1
+    target = 0
     
     for k, field in enumerate(discrete_records):
         for i, table_headers in enumerate(headers):
@@ -418,14 +418,14 @@ def get_discernibility_matrix(db, tables, headers, foreign_keys, discretize,
                 if discretize[i][j] == 1:
                     '''Decision value should be appended last to the row'''
                     if decision[i][j] == 0:
-                        discrete_row.append(field[i*len(table_headers)+j])
+                        discrete_row.append(field[i*len(headers[0])+j])
                         if k == 0:
                             map_i.append(i)
                             map_j.append(j)
+                            target += 1
                     elif decision[i][j] == 1:
                         '''Because of this it will only work with ONE decision value'''
-                        decision_value = field[i*len(table_headers)+j]
-                        target = len(table_headers) - 1
+                        decision_value = field[i*len(headers[0])+j]
                         decision_i = i
                         decision_j = j
         discrete_row.append(decision_value)
