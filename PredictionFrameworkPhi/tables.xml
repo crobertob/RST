@@ -6,7 +6,7 @@
         <field name="cores" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="cores" partition_size="5" offset="0" decision="0"></field>
         <field name="threads_per_core" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="threads_per_core" partition_size="1" offset="0" decision="0"></field>
         <field name="affinity" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="affinity" partition_size="1" offset="0" decision="0"></field>
-        <field name="input_size" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="input_size" partition_size="2" offset="0" decision="0"></field>
+        <field name="input_size" type="int" user_input="1" field_attr="INTEGER NOT NULL" discretize="1" script="input_size" partition_size="512" offset="0" decision="0"></field>
         <field name="exec_time" type="float" user_input="1" field_attr="REAL NOT NULL" discretize="1" script="exec_time" partition_size="1" offset="0" decision="1"></field>
         <field name="machine_id" type="int" user_input="0" field_attr="INTEGER NOT NULL" discretize="0" script="" partition_size="" offset="" decision="0"></field>
         <foreign_key name="machine_id" reference="machines"></foreign_key>

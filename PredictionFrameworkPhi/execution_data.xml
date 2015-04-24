@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='us-ascii'?>
+<main_table>
+    <application>/home/rcamacho/matrixMultiply/phi/matrixMultiply.mic</application>
+    <cores>14</cores>
+    <affinity>"compact,granularity=core"</affinity>
+    <input_size>1024</input_size>
+    <threads_per_core>1</threads_per_core>
+</main_table>

@@ -211,13 +211,13 @@ def refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize
                     if user_input[i][j] == 1:
                         if discretize[i][j] == 1:
                             if types[i][j] == "int":
-                                value.append(int(ceil(int(record[i*len(table_headers) + j]/
+                                value.append(int(int(ceil(record[i*len(headers[0]) + j]/
                                                      partition_sizes[i][j]))) + offsets[i][j])
                             elif types[i][j] == "float":
-                                value.append(int(ceil(float(record[i*len(table_headers) + j]/
+                                value.append(int(float(ceil(record[i*len(headers[0]) + j]/
                                                        partition_sizes[i][j]))) + offsets[i][j])
                         else:
-                            value.append(record[i*len(table_headers)+j])
+                            value.append(record[i*len(headers[0])+j])
                 value_table[i].append(value)
                 value = []
             except ValueError as err:
@@ -370,6 +370,9 @@ def store_discrete_record(db, discrete_tables, headers, foreign_keys,
     logging.debug("Discrete record to be added: %s", discrete_record)
     ref_table_id = 0
     main_table_id = 0
+    logging.debug("Foreign_keys: %s", foreign_keys)
+    logging.debug("Discrete table: %s", discrete_tables)
+    logging.debug("Foreign_keys: %s", foreign_keys)
     if len(foreign_keys) > 0:
         for i, current_key in enumerate(foreign_keys):
             for p, table in enumerate(discrete_tables):
@@ -379,6 +382,9 @@ def store_discrete_record(db, discrete_tables, headers, foreign_keys,
                 if table == "discrete_" + foreign_keys[i][2]:
                     main_table_id = p
             try:
+                logging.debug("Ref table id: %s", ref_table_id)
+                logging.debug("Main table id: %s", main_table_id)
+                logging.debug("Current key: %s", current_key)
                 key_value = get_and_set_foreign(db, discrete_tables[ref_table_id],
                                                   headers[ref_table_id], 
                                                   current_key, discrete_record[ref_table_id])
@@ -896,7 +902,9 @@ def get_and_set_foreign(db, table, header, foreign_key, value_row):
 
 def get_foreign_id(db, header, reference, value):
     cursor = db.cursor()
-    cursor.execute("SELECT id FROM " + reference + " WHERE " + header + "=?",(value,))
+    sql = "SELECT id FROM " + reference + " WHERE " + header + "=?"
+    cursor.execute(sql,(value,))
+    logging.debug("SQL query: %s name= %s", sql, value)
     fields = cursor.fetchone()
     return fields[0] if fields is not None else None
 
@@ -1002,7 +1010,7 @@ def main():
                                  Rough Set Theory                            '''
     predicted_decision_value = 0
     '''Check if there are any records before trying to obtain the d-reduct'''
-    if record_count(db, tables) > 0:
+    if record_count(db, tables) > 5:
         ''' Obtain discernibility matrix, probably this could be in one function'''
         discernibility_matrix, map_i, map_j = get_discernibility_matrix(db, discrete_tables, headers, 
                                                           foreign_keys, discretize, decision)
