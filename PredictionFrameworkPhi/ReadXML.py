@@ -9,18 +9,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 # General Public License for more details.
 
-import datetime
 import logging
-import itertools
 import os
 import sqlite3
 import sys
-import tempfile
 import xml.etree.ElementTree
 import xml.parsers.expat
-import xml.sax.saxutils
-import Console
-import Util
 from builtins import len
 from copy import deepcopy
 from locale import str
@@ -545,7 +539,7 @@ def get_dreduct(min_matrix):
             dreduct_set.update(row[j])
     for set_elem in dreduct_set:
         dreduct_list.append(set_elem)
-    logging.debug("D-reduct: %s", dreduct_list)
+    logging.info("D-reduct: %s", dreduct_list)
     return dreduct_list
 
 
@@ -568,7 +562,7 @@ def get_relevant_attribute_list(min_matrix):
                     attribute_set.update(inner_row[i + 1])
         attribute_list.append(sorted(attribute_set))
         attribute_set = set()
-    logging.debug("Relevant attribute list: %s", attribute_list)
+    logging.info("Relevant attribute list: %s", attribute_list)
     return attribute_list
 
                     
@@ -638,9 +632,9 @@ def get_individual_records(db, tables, table_headers, foreign_keys):
 
 
 def print_records(cursor):    
-    logging.debug("Current database:")
+    logging.info("Current database:")
     for record in cursor:
-        logging.debug(record)
+        logging.info(record)
 
 
 def create_tables(db, tables, headers, attributes, foreign_keys, references):
@@ -891,7 +885,6 @@ def insert_sqlite(db, tablename, headers, values):
 
  
 def get_and_set_foreign(db, table, header, foreign_key, value_row):
-    '''TODO: Why header[1]?'''
     foreign_id = get_foreign_id(db, header[1], table, value_row[0])
     if foreign_id is not None:
         return foreign_id
@@ -976,7 +969,8 @@ def main():
     '''############################################################################
                                 Start main program                               '''
     ''' Change level from DEBUG to avoid showing messages'''
-    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(levelname)s:%(message)s', filename='outputRST.log',
+                        level=logging.INFO)
     ''' Connect to testPhi.sdb database, change as required'''
     db = connect("testPhi.sdb") 
     
