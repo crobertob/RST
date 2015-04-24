@@ -968,12 +968,26 @@ def prediction_algorithm(discrete_record, reduced_table, dreduct, map_i, map_j, 
 def main():
     '''############################################################################
                                 Start main program                               '''
-    ''' Change level from DEBUG to avoid showing messages'''
-    logging.basicConfig(format='%(levelname)s:%(message)s', filename='outputRST.log',
-                        level=logging.INFO)
     ''' Connect to testPhi.sdb database, change as required'''
     db = connect("testPhi.sdb") 
+    if len(sys.argv) == 2:
+        numIterations = int(sys.argv[1])
+    elif len(sys.argv) == 3:
+        numIterations = int(sys.argv[1])
+        loggingLevel = sys.argv[2]
+        if loggingLevel == "debug":
+            ''' Change level from DEBUG to avoid showing messages'''
+            logging.basicConfig(format='%(levelname)s:%(message)s', filename='debugRST.log',
+                        level=logging.DEBUG)
+        elif loggingLevel == "info":
+            ''' Change level from DEBUG to avoid showing messages'''
+            logging.basicConfig(format='%(levelname)s:%(message)s', filename='outputRST.log',
+                        level=logging.INFO)
     
+    else:
+        numIterations = 1
+    
+        
     '''#############################################################################
                                 Initialize database                              '''
     
@@ -982,71 +996,72 @@ def main():
                 partition_sizes, offsets, decision, foreign_keys) = get_db_struct(db)          
     ''' Import records from XML if available'''
     #import_records_fromXML(db, tables, headers, types, foreign_keys, user_input)
-    ''' Print regular DB for debugging purposes'''
-    print_records(get_records(db, tables, headers, foreign_keys))
-    ''' Discretize imported values'''
-    refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
-                                offsets, decision, partition_sizes, user_input)
-    ''' Print discrete DB for debugging'''
-    print_records(get_records(db, discrete_tables, headers, foreign_keys))
-    
-    '''#############################################################################
-                                Obtain values for prediction                 '''
     ''' Importing relevant modules from script list'''
     modules = import_modules(scripts)
-    ''' Add individual record using scripts'''
-    (record, decision_script, decision_i, decision_j, real_j) = \
-        read_record_from_scripts(headers, user_input, modules, decision)
-    ''' Discretize new record '''
-    discrete_record = discretize_record(headers, types, discretize, offsets, decision,
-                           partition_sizes, user_input, record)
-    '''#############################################################################
-                                 Rough Set Theory                            '''
-    predicted_decision_value = 0
-    '''Check if there are any records before trying to obtain the d-reduct'''
-    if record_count(db, tables) > 5:
-        ''' Obtain discernibility matrix, probably this could be in one function'''
-        discernibility_matrix, map_i, map_j = get_discernibility_matrix(db, discrete_tables, headers, 
-                                                          foreign_keys, discretize, decision)
-        min_matrix = get_minimal_matrix(discernibility_matrix)
-        ''' Obtain the d-reduct of the matrix'''
-        dreduct = get_dreduct(min_matrix)
-        ''' Obtain the list of relevant attributes'''
-        ''' Map this list to the actual indices'''
-        relevant_attribute_list = get_relevant_attribute_list(min_matrix)
-        
-        ''' Translate relevant attributes into reduced decision table'''
-        reduced_table = obtain_reduced_table(db, discrete_tables, tables, headers, 
-                                             foreign_keys, relevant_attribute_list,
-                                             dreduct, map_i, map_j)
-        '''#############################################################################
-                                        Prediction algorithm:
-                 1) First search for the records that match
-                 2) Next average the execution time of all these records'''
-        predicted_decision_value = prediction_algorithm(discrete_record, reduced_table, 
-                                                        dreduct, map_i, map_j, headers)
-    
-    ''' Measure execution time using script and append to records'''
-    record, discrete_record, real_decision_value = \
-            obtain_real_decision_value(record, discrete_record, decision_script,
-                                       decision_i, decision_j, real_j, modules, types,
-                                       discretize, partition_sizes, offsets)
-    ''' Store individual record in original DB'''
-    store_record_in_DB(db, tables, headers, foreign_keys, record)
-    
-    ''' Store discrete record in discrete DB'''
-    store_discrete_record(db, discrete_tables, headers, foreign_keys,
-                             discrete_record)
     ''' Print regular DB for debugging purposes'''
     print_records(get_records(db, tables, headers, foreign_keys))
-    ''' Print discrete DB for debugging'''
-    print_records(get_records(db, discrete_tables, headers, foreign_keys))
-    
-    ''' Show prediction result'''
-    percent_error = abs(real_decision_value-predicted_decision_value)/real_decision_value * 100
-    logging.info("Predicted value: %s Actual value: %s Percent error: %.2f%%",
-                  predicted_decision_value, real_decision_value, percent_error)
-    '''TODO: Export DB options'''
+    for numIter in range(numIterations):
+        ''' Discretize imported values'''
+        refresh_discrete_tables(db, tables, headers, types, foreign_keys, discretize, 
+                                    offsets, decision, partition_sizes, user_input)
+        ''' Print discrete DB for debugging'''
+        print_records(get_records(db, discrete_tables, headers, foreign_keys))
+        
+        '''#############################################################################
+                                    Obtain values for prediction                 '''
+        ''' Add individual record using scripts'''
+        (record, decision_script, decision_i, decision_j, real_j) = \
+            read_record_from_scripts(headers, user_input, modules, decision)
+        ''' Discretize new record '''
+        discrete_record = discretize_record(headers, types, discretize, offsets, decision,
+                               partition_sizes, user_input, record)
+        '''#############################################################################
+                                     Rough Set Theory                            '''
+        predicted_decision_value = 0
+        '''Check if there are any records before trying to obtain the d-reduct'''
+        if record_count(db, tables) > 10:
+            ''' Obtain discernibility matrix, probably this could be in one function'''
+            discernibility_matrix, map_i, map_j = get_discernibility_matrix(db, discrete_tables, headers, 
+                                                              foreign_keys, discretize, decision)
+            min_matrix = get_minimal_matrix(discernibility_matrix)
+            ''' Obtain the d-reduct of the matrix'''
+            dreduct = get_dreduct(min_matrix)
+            ''' Obtain the list of relevant attributes'''
+            ''' Map this list to the actual indices'''
+            relevant_attribute_list = get_relevant_attribute_list(min_matrix)
+            
+            ''' Translate relevant attributes into reduced decision table'''
+            reduced_table = obtain_reduced_table(db, discrete_tables, tables, headers, 
+                                                 foreign_keys, relevant_attribute_list,
+                                                 dreduct, map_i, map_j)
+            '''#############################################################################
+                                            Prediction algorithm:
+                     1) First search for the records that match
+                     2) Next average the execution time of all these records'''
+            predicted_decision_value = prediction_algorithm(discrete_record, reduced_table, 
+                                                            dreduct, map_i, map_j, headers)
+        
+        ''' Measure execution time using script and append to records'''
+        record, discrete_record, real_decision_value = \
+                obtain_real_decision_value(record, discrete_record, decision_script,
+                                           decision_i, decision_j, real_j, modules, types,
+                                           discretize, partition_sizes, offsets)
+        ''' Store individual record in original DB'''
+        store_record_in_DB(db, tables, headers, foreign_keys, record)
+        
+        ''' Store discrete record in discrete DB'''
+        store_discrete_record(db, discrete_tables, headers, foreign_keys,
+                                 discrete_record)
+        ''' Print regular DB for debugging purposes'''
+        print_records(get_records(db, tables, headers, foreign_keys))
+        ''' Print discrete DB for debugging'''
+        print_records(get_records(db, discrete_tables, headers, foreign_keys))
+        
+        ''' Show prediction result'''
+        percent_error = abs(real_decision_value-predicted_decision_value)/real_decision_value * 100
+        logging.info("Predicted value: %s Actual value: %s Percent error: %.2f%%",
+                      predicted_decision_value, real_decision_value, percent_error)
+        '''TODO: Export DB options'''
 
 
 if __name__ == "__main__":
